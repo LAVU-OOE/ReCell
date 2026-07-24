@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Re:Sort — ASZ Batterie-Sortierer</title>
+  <title>Re:Charge — ASZ Batterie-Sortierer</title>
   
   <meta name="theme-color" content="#8bc34a">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -54,6 +54,13 @@
     .starter { border-color: #ff9800; } .starter .title { color: #ffb74d; }
     
     #loading { position: absolute; inset: 0; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; font-size: 0.9rem; color: #aaa; }
+
+    /* DEV ONLY STYLES */
+    .dev-panel { width: 100%; max-width: 440px; margin-top: 25px; padding: 10px; background: #221111; border: 1px solid #ff4444; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
+    .dev-panel summary { font-size: 0.8rem; font-weight: bold; color: #ff6666; cursor: pointer; text-align: center; }
+    .dev-btns { display: flex; gap: 8px; margin-top: 8px; }
+    .dev-btn { flex: 1; padding: 8px; font-size: 0.75rem; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; }
+    .dev-btn-danger { background: #881111; border-color: #ff4444; }
   </style>
 </head>
 <body>
@@ -65,7 +72,7 @@
       <rect x="42" y="22" width="16" height="8" rx="2" fill="#8bc34a"/>
       <path d="M 38 55 L 52 38 L 48 53 L 62 45 L 48 62 L 52 48 Z" fill="#ffc107"/>
     </svg>
-    <h1>Re:Sort</h1>
+    <h1>Re:Charge</h1>
   </header>
 
   <p class="sub">Vorsortierung nach O.Ö. LAVU Richtlinien</p>
@@ -100,7 +107,38 @@
     <div id="target-warn" class="warn"></div>
   </div>
 
+  <!-- DEV ONLY SECTION -->
+  <details class="dev-panel">
+    <summary>🛠️ Dev Tools (Cache / Service Worker)</summary>
+    <div class="dev-btns">
+      <button class="dev-btn dev-btn-danger" onclick="purgeCacheAndSW()">🗑️ SW & Cache leeren</button>
+      <button class="dev-btn" onclick="forceReload()">🔄 Hard Reload</button>
+    </div>
+  </details>
+
   <script>
+    // Dev Tools Functions
+    async function purgeCacheAndSW() {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (let reg of registrations) {
+          await reg.unregister();
+        }
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        for (let key of keys) {
+          await caches.delete(key);
+        }
+      }
+      alert('Service Worker & Caches komplett gelöscht! Seite wird neu geladen.');
+      window.location.reload(true);
+    }
+
+    function forceReload() {
+      window.location.reload(true);
+    }
+
     // Favicon & SW Setup
     const svgElement = document.getElementById('app-icon-svg');
     const svgString = new XMLSerializer().serializeToString(svgElement);
