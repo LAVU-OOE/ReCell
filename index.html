@@ -50,7 +50,11 @@
       padding: 16px;
       border: 2px solid rgba(139, 195, 74, 0.3);
       border-radius: 12px;
-      transition: border-color 0.2s ease;
+      transition: all 0.2s ease;
+    }
+
+    .scanner-overlay.manual {
+      border-color: rgba(255, 152, 0, 0.4);
     }
 
     .scanner-overlay.detected {
@@ -137,8 +141,10 @@
     .options-box { width: 100%; max-width: 440px; margin-top: 12px; background: #1e1e1e; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
     .options-box label { font-size: 0.85rem; color: #ff9800; font-weight: bold; cursor: pointer; }
 
+    /* DYNAMISCHE BUTTON-STYLES */
     .btn-action { width: 100%; max-width: 440px; margin-top: 12px; padding: 14px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .btn-scan-mode { background: #333; color: #8bc34a; border: 1px solid #8bc34a; }
+    .btn-auto-mode { background: #223311; color: #8bc34a; border: 1px solid #8bc34a; }
+    .btn-manual-mode { background: #8bc34a; color: #000; }
     .btn-reset-mode { background: #2196f3; color: #fff; }
     .btn-action:disabled { background: #222; color: #555; border-color: #333; cursor: not-allowed; }
 
@@ -179,7 +185,7 @@
     <h1>Re:Charge</h1>
   </header>
 
-  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.6</div>
+  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.7</div>
 
   <p class="sub">Vorsortierung nach O.Ö. LAVU Richtlinien</p>
 
@@ -220,9 +226,9 @@
     <input type="checkbox" id="damaged-chk" style="width: 20px; height: 20px;">
   </div>
 
-  <button class="btn-action btn-scan-mode" id="action-btn" disabled>
+  <button class="btn-action btn-auto-mode" id="action-btn" disabled>
     <span id="btn-icon">📡</span>
-    <span id="btn-text">Auto-Scan Aktiv</span>
+    <span id="btn-text">Auto-Scan (Aktiv)</span>
   </button>
 
   <div id="result" class="card">
@@ -249,7 +255,7 @@
   </details>
 
   <script>
-    const APP_VERSION = "v1.0.6-dev";
+    const APP_VERSION = "v1.0.7-dev";
     document.getElementById('dev-version-banner').innerText = `DEV VERSION: ${APP_VERSION}`;
 
     const logContainer = document.getElementById('log-container');
@@ -332,7 +338,7 @@
     const targetWarn = document.getElementById('target-warn');
 
     let model = null;
-    let isAutoScanning = true;
+    let scanState = 'AUTO'; // Moegliche Werte: 'AUTO', 'MANUAL', 'RESULT'
     let lastScanTime = 0;
 
     async function initCamera() {
@@ -372,8 +378,8 @@
     }
 
     function triggerSnap(rule) {
-      isAutoScanning = false;
-      hudOverlay.classList.add('detected');
+      scanState = 'RESULT';
+      hudOverlay.className = 'scanner-overlay detected';
       hudTag.innerText = "OBJECT SNAP!";
       scanLine.style.display = 'none';
 
@@ -391,9 +397,29 @@
       actionBtn.disabled = false;
     }
 
+    async function executeSingleClassify() {
+      if (!model || video.readyState !== 4) return;
+      try {
+        const predictions = await model.classify(video);
+        const topClass = predictions[0].className.toLowerCase();
+        
+        let rule = aszRules.geraete;
+        if (damagedChk.checked) {
+          rule = aszRules.li_beschaedigt;
+        } else if (topClass.includes('car battery') || topClass.includes('accumulator')) {
+          rule = aszRules.starter;
+        } else if (topClass.includes('power bank') || topClass.includes('laptop') || topClass.includes('cellular phone')) {
+          rule = aszRules.li_unbeschaedigt;
+        }
+        
+        triggerSnap(rule);
+      } catch (e) {
+        console.error("Manual Scan Error:", e);
+      }
+    }
+
     async function autoScanLoop(timestamp) {
-      if (isAutoScanning && model && video.readyState === 4) {
-        // Drosselung auf ca. alle 400ms für geschmeidige Performance
+      if (scanState === 'AUTO' && model && video.readyState === 4) {
         if (timestamp - lastScanTime > 400) {
           lastScanTime = timestamp;
           try {
@@ -401,9 +427,8 @@
             const targetClass = predictions[0].className.toLowerCase();
             const prob = predictions[0].probability;
 
-            hudTag.innerText = `SCANNING... (${Math.round(prob * 100)}%)`;
+            hudTag.innerText = `AUTO SCANNING... (${Math.round(prob * 100)}%)`;
 
-            // Erkennungs-Keywords für Akkus & Batterien
             const batteryKeywords = ['battery', 'accumulator', 'power bank', 'cellular phone', 'laptop', 'ipod'];
             const matchesBattery = batteryKeywords.some(kw => targetClass.includes(kw));
 
@@ -426,6 +451,43 @@
       requestAnimationFrame(autoScanLoop);
     }
 
+    function setAutoScanMode() {
+      scanState = 'AUTO';
+      result.className = "card";
+      damagedChk.checked = false;
+      hudOverlay.className = 'scanner-overlay';
+      hudTag.innerText = "AUTO SCANNING...";
+      scanLine.style.display = 'block';
+
+      actionBtn.className = "btn-action btn-auto-mode";
+      btnIcon.innerText = "📡";
+      btnText.innerText = "Auto-Scan (Aktiv)";
+    }
+
+    function setManualScanMode() {
+      scanState = 'MANUAL';
+      hudOverlay.className = 'scanner-overlay manual';
+      hudTag.innerText = "MANUAL MODE";
+      scanLine.style.display = 'block';
+
+      actionBtn.className = "btn-action btn-manual-mode";
+      btnIcon.innerText = "📷";
+      btnText.innerText = "Manuell Scannen";
+    }
+
+    actionBtn.addEventListener('click', async () => {
+      if (scanState === 'AUTO') {
+        // Switch to Manual Mode
+        setManualScanMode();
+      } else if (scanState === 'MANUAL') {
+        // Perform Manual Scan immediately
+        await executeSingleClassify();
+      } else if (scanState === 'RESULT') {
+        // Reset and trigger Auto-Scan mode again
+        setAutoScanMode();
+      }
+    });
+
     async function main() {
       if (!(await initCamera()) || !(await initModel())) {
         statusText.innerText = "ERR";
@@ -441,22 +503,6 @@
         requestAnimationFrame(autoScanLoop);
       }, 300);
     }
-
-    actionBtn.addEventListener('click', () => {
-      if (!isAutoScanning) {
-        // Reset zum Weiterscannen
-        result.className = "card";
-        damagedChk.checked = false;
-        hudOverlay.classList.remove('detected');
-        hudTag.innerText = "AUTO SCANNING...";
-        scanLine.style.display = 'block';
-
-        actionBtn.className = "btn-action btn-scan-mode";
-        btnIcon.innerText = "📡";
-        btnText.innerText = "Auto-Scan Aktiv";
-        isAutoScanning = true;
-      }
-    });
 
     main();
   </script>
