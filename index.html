@@ -11,8 +11,9 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" id="favicon" type="image/svg+xml" href="">
 
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+  <!-- Standard TensorFlow CDN mit unpkg Fallback-Option -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
@@ -42,7 +43,7 @@
     #loading { 
       position: absolute; 
       inset: 0; 
-      background: rgba(8, 12, 8, 0.92); 
+      background: rgba(8, 12, 8, 0.94); 
       display: flex; 
       flex-direction: column; 
       justify-content: space-between; 
@@ -182,7 +183,7 @@
     <h1>Re:Charge</h1>
   </header>
 
-  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.4</div>
+  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.5</div>
 
   <p class="sub">Vorsortierung nach O.Ö. LAVU Richtlinien</p>
 
@@ -194,12 +195,12 @@
         <span>SYSTEM INIT</span>
         <div class="loader-status">
           <span id="loader-status-text">LOADING</span>
-          <div class="loader-spinner"></div>
+          <div class="loader-spinner" id="loader-spinner"></div>
         </div>
       </div>
 
       <div class="loader-logs" id="log-container">
-        <div>Init system core...</div>
+        <div>Booting core engine...</div>
       </div>
 
       <div class="loader-footer">
@@ -245,44 +246,30 @@
   </details>
 
   <script>
-    const APP_VERSION = "v1.0.4-dev";
+    const APP_VERSION = "v1.0.5-dev";
     document.getElementById('dev-version-banner').innerText = `DEV VERSION: ${APP_VERSION}`;
-
-    const techLogs = [
-      "Requesting camera access...",
-      "Init WebGL backend [GPU]...",
-      "Loading TF.js engine...",
-      "Fetching MobileNet weights...",
-      "Compiling Conv2D layers...",
-      "Allocating tensor buffers...",
-      "Executing warmup pass...",
-      "Applying LAVU rule engine...",
-      "System READY."
-    ];
 
     const logContainer = document.getElementById('log-container');
     const progressFill = document.getElementById('progress-fill');
     const progressPct = document.getElementById('progress-pct');
-    let currentLogIdx = 0;
+    const statusText = document.getElementById('loader-status-text');
+    const spinner = document.getElementById('loader-spinner');
 
-    function addLogMessage(text) {
+    function log(text, isError = false) {
+      console.log(`[Re:Charge] ${text}`);
       const line = document.createElement('div');
       line.innerText = text;
+      if (isError) line.style.color = '#ff6666';
       logContainer.appendChild(line);
       if (logContainer.children.length > 5) {
         logContainer.removeChild(logContainer.firstChild);
       }
     }
 
-    const logInterval = setInterval(() => {
-      if (currentLogIdx < techLogs.length - 1) {
-        addLogMessage(techLogs[currentLogIdx]);
-        currentLogIdx++;
-        const pct = Math.min(90, Math.round((currentLogIdx / techLogs.length) * 100));
-        progressFill.style.width = pct + '%';
-        progressPct.innerText = pct + '%';
-      }
-    }, 250);
+    function setProgress(pct) {
+      progressFill.style.width = pct + '%';
+      progressPct.innerText = pct + '%';
+    }
 
     async function purgeCacheAndSW() {
       if ('serviceWorker' in navigator) {
@@ -293,7 +280,7 @@
         const keys = await caches.keys();
         for (let key of keys) { await caches.delete(key); }
       }
-      alert(`Cache/SW geleert! Lade ${APP_VERSION} neu...`);
+      alert(`Cache & Worker bereinigt!`);
       window.location.reload(true);
     }
 
@@ -341,67 +328,76 @@
     let model = null;
     let isScanMode = true;
 
-    // FEHLERFREIES UNABHÄNGIGES KAMERA-SETUP
-    async function setupCamera() {
+    async function initCamera() {
+      log("Fordere Kamera an...");
+      setProgress(20);
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: { exact: "environment" } } 
-        }).catch(async () => {
-          // Fallback falls exact environment fehlschlägt
-          return await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } }
         });
-
         video.srcObject = stream;
-        return new Promise((resolve) => {
-          video.onloadedmetadata = () => {
-            video.play();
-            resolve(true);
-          };
-        });
+        await new Promise((res) => video.onloadedmetadata = res);
+        await video.play();
+        log("Kamera OK.");
+        setProgress(50);
+        return true;
       } catch (err) {
-        console.error("Cam Error:", err);
+        log("ERR: Kamera-Sperre / FEHLER!", true);
+        console.error(err);
         return false;
       }
     }
 
-    async function init() {
-      // Parallelisieren von Kamera und TF Model Loading
-      const camPromise = setupCamera();
-      const modelPromise = mobilenet.load();
+    async function initModel() {
+      log("Lade TF.js Engine...");
+      setProgress(60);
+      try {
+        if (typeof mobilenet === 'undefined') {
+          throw new Error("MobileNet Script nicht geladen (CDN blocked?)");
+        }
+        log("Lade MobileNet Weights...");
+        setProgress(85);
+        
+        // Timeout-Schutz für das Laden der Modell-Gewichte
+        const modelPromise = mobilenet.load({ version: 2, alpha: 0.5 });
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Netzwerk-Timeout")), 10000)
+        );
 
-      // Kamera Warten
-      const camSuccess = await camPromise;
-      if (!camSuccess) {
-        clearInterval(logInterval);
-        addLogMessage("ERROR: Kamera-Zugriff fehlgeschlagen!");
-        document.getElementById('loader-status-text').innerText = "NO CAM";
-        progressFill.style.background = '#ff4444';
+        model = await Promise.race([modelPromise, timeoutPromise]);
+        
+        log("KI Modell OK.");
+        setProgress(100);
+        return true;
+      } catch (err) {
+        log(`ERR: ${err.message}`, true);
+        console.error(err);
+        return false;
+      }
+    }
+
+    async function main() {
+      const camOk = await initCamera();
+      if (!camOk) {
+        statusText.innerText = "CAM ERR";
+        progressFill.style.background = "#ff4444";
+        if (spinner) spinner.style.display = "none";
         return;
       }
 
-      addLogMessage("Camera stream OK.");
-
-      // KI Modell Warten
-      try {
-        model = await modelPromise;
-        
-        clearInterval(logInterval);
-        addLogMessage("System READY.");
-        progressFill.style.width = '100%';
-        progressPct.innerText = '100%';
-        document.getElementById('loader-status-text').innerText = "OK";
-
-        setTimeout(() => {
-          loading.style.display = 'none';
-          actionBtn.disabled = false;
-        }, 200);
-
-      } catch (err) {
-        clearInterval(logInterval);
-        addLogMessage("ERROR: KI-Modell Ladefehler!");
-        progressFill.style.background = '#ff4444';
-        document.getElementById('loader-status-text').innerText = "FAIL";
+      const modelOk = await initModel();
+      if (!modelOk) {
+        statusText.innerText = "NET ERR";
+        progressFill.style.background = "#ff4444";
+        if (spinner) spinner.style.display = "none";
+        return;
       }
+
+      statusText.innerText = "OK";
+      setTimeout(() => {
+        loading.style.display = 'none';
+        actionBtn.disabled = false;
+      }, 300);
     }
 
     actionBtn.addEventListener('click', async () => {
@@ -409,41 +405,48 @@
         actionBtn.disabled = true;
         btnText.innerText = "Analysiere...";
         
-        const predictions = await model.classify(video);
-        const backgroundTerms = ['tile', 'floor', 'wall', 'wood', 'table', 'carpet', 'pattern', 'pavement', 'concrete'];
-        
-        const topClass = predictions[0].className.toLowerCase();
-        const isJustBackground = backgroundTerms.some(bg => topClass.includes(bg)) && predictions[0].probability > 0.6;
+        try {
+          const predictions = await model.classify(video);
+          const backgroundTerms = ['tile', 'floor', 'wall', 'wood', 'table', 'carpet', 'pattern', 'pavement', 'concrete'];
+          
+          const topClass = predictions[0].className.toLowerCase();
+          const isJustBackground = backgroundTerms.some(bg => topClass.includes(bg)) && predictions[0].probability > 0.6;
 
-        if (isJustBackground) {
-          alert("Kein Objekt erkannt! Bitte halte den Akku direkt vor die Kamera.");
-          btnText.innerText = "Scan ausführen";
+          if (isJustBackground) {
+            alert("Kein Objekt erkannt! Bitte halte den Akku direkt vor die Kamera.");
+            btnText.innerText = "Scan ausführen";
+            actionBtn.disabled = false;
+            return;
+          }
+
+          let rule = aszRules.geraete;
+          if (damagedChk.checked) {
+            rule = aszRules.li_beschaedigt;
+          } else if (topClass.includes('car battery') || topClass.includes('accumulator')) {
+            rule = aszRules.starter;
+          } else if (topClass.includes('power bank') || topClass.includes('laptop') || topClass.includes('cellular phone')) {
+            rule = aszRules.li_unbeschaedigt;
+          }
+
+          result.className = `card active ${rule.css}`;
+          artNr.innerText = rule.art;
+          targetTitle.innerText = rule.title;
+          containerSvgSlot.innerHTML = rule.icon;
+          containerDesc.innerText = rule.containerName;
+          targetInfo.innerHTML = rule.info;
+          targetWarn.innerHTML = rule.warn;
+
+          isScanMode = false;
+          actionBtn.className = "btn-action btn-reset-mode";
+          btnIcon.innerText = "🔄";
+          btnText.innerText = "Neuer Scan";
           actionBtn.disabled = false;
-          return;
+
+        } catch (e) {
+          alert("Fehler bei der Bildanalyse!");
+          actionBtn.disabled = false;
+          btnText.innerText = "Scan ausführen";
         }
-
-        let rule = aszRules.geraete;
-        if (damagedChk.checked) {
-          rule = aszRules.li_beschaedigt;
-        } else if (topClass.includes('car battery') || topClass.includes('accumulator')) {
-          rule = aszRules.starter;
-        } else if (topClass.includes('power bank') || topClass.includes('laptop') || topClass.includes('cellular phone')) {
-          rule = aszRules.li_unbeschaedigt;
-        }
-
-        result.className = `card active ${rule.css}`;
-        artNr.innerText = rule.art;
-        targetTitle.innerText = rule.title;
-        containerSvgSlot.innerHTML = rule.icon;
-        containerDesc.innerText = rule.containerName;
-        targetInfo.innerHTML = rule.info;
-        targetWarn.innerHTML = rule.warn;
-
-        isScanMode = false;
-        actionBtn.className = "btn-action btn-reset-mode";
-        btnIcon.innerText = "🔄";
-        btnText.innerText = "Neuer Scan";
-        actionBtn.disabled = false;
 
       } else {
         result.className = "card";
@@ -456,7 +459,7 @@
       }
     });
 
-    init();
+    main();
   </script>
 </body>
 </html>
