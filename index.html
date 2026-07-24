@@ -40,6 +40,76 @@
     .cam-box { position: relative; width: 100%; max-width: 440px; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
     video { width: 100%; height: 100%; object-fit: cover; }
     
+    /* TECH LOADER OVERLAY */
+    #loading { 
+      position: absolute; 
+      inset: 0; 
+      background: #080c08; 
+      display: flex; 
+      flex-direction: column; 
+      justify-content: space-between; 
+      padding: 16px; 
+      font-family: 'Courier New', Courier, monospace; 
+      color: #00ff66; 
+      z-index: 10;
+      border: 1px solid #114411;
+    }
+    
+    .loader-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #005511;
+      padding-bottom: 8px;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
+    
+    .loader-spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid #00ff66;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loader-logs {
+      font-size: 0.68rem;
+      line-height: 1.35;
+      color: #00cc55;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      height: 140px;
+      overflow: hidden;
+      word-break: break-all;
+    }
+
+    .loader-logs div::before {
+      content: "> ";
+      color: #8bc34a;
+    }
+
+    .loader-progress-bar {
+      width: 100%;
+      height: 6px;
+      background: #112211;
+      border-radius: 3px;
+      overflow: hidden;
+      border: 1px solid #004411;
+      margin-top: 8px;
+    }
+
+    .loader-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #4caf50, #00ff66);
+      transition: width 0.15s ease-out;
+    }
+
     .options-box { width: 100%; max-width: 440px; margin-top: 12px; background: #1e1e1e; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
     .options-box label { font-size: 0.85rem; color: #ff9800; font-weight: bold; cursor: pointer; }
 
@@ -66,8 +136,6 @@
     .li-ok { border-color: #2196f3; } .li-ok .title { color: #64b5f6; }
     .li-dmg { border-color: #f44336; } .li-dmg .title { color: #e57373; }
     .starter { border-color: #ff9800; } .starter .title { color: #ffb74d; }
-    
-    #loading { position: absolute; inset: 0; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; font-size: 0.9rem; color: #aaa; }
 
     /* DEV PANEL STYLES */
     .dev-panel { width: 100%; max-width: 440px; margin-top: 25px; padding: 10px; background: #221111; border: 1px solid #ff4444; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
@@ -89,14 +157,29 @@
     <h1>Re:Charge</h1>
   </header>
 
-  <!-- DEV ONLY VERSION BANNER (GANZ OBEN) -->
-  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.0</div>
+  <!-- DEV ONLY VERSION BANNER -->
+  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.2</div>
 
   <p class="sub">Vorsortierung nach O.Ö. LAVU Richtlinien</p>
 
   <div class="cam-box">
     <video id="webcam" autoplay playsinline muted></video>
-    <div id="loading">Lade KI-Modell...</div>
+    
+    <!-- SYSTEM LOG ANIMATED LOADER -->
+    <div id="loading">
+      <div class="loader-header">
+        <span>INITIALIZING NEURAL NETWORK</span>
+        <div class="loader-spinner"></div>
+      </div>
+      <div class="loader-logs" id="log-container">
+        <div>[SYS] Allocating WebGL context...</div>
+      </div>
+      <div>
+        <div class="loader-progress-bar">
+          <div class="loader-progress-fill" id="progress-fill"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="options-box" id="options-box">
@@ -135,8 +218,46 @@
 
   <script>
     // --- DEV VERSION CONFIG ---
-    const APP_VERSION = "v1.0.1-dev"; // <--- Hier einfach hochzählen bei jeder Änderung!
+    const APP_VERSION = "v1.0.2-dev";
     document.getElementById('dev-version-banner').innerText = `DEV VERSION: ${APP_VERSION}`;
+
+    // --- ANIMATED TECH LOG SYSTEM ---
+    const techLogs = [
+      "Initializing WebGL Backend [GPU Accelerated]",
+      "Loading TF.js Core Engine v4.x...",
+      "Fetching MobileNet v1.0 Weights (224x224 input)...",
+      "Compiling Depthwise Convolution Layers...",
+      "Setting up Tensor Memory Pools...",
+      "Binding WebCam Stream to Texture Matrix...",
+      "Warmup Run: Executing dummy inference Pass...",
+      "Applying ASZ Classification Rule Engine...",
+      "Model status: READY."
+    ];
+
+    const logContainer = document.getElementById('log-container');
+    const progressFill = document.getElementById('progress-fill');
+    let currentLogIdx = 0;
+
+    function addLogMessage(text) {
+      const line = document.createElement('div');
+      line.innerText = text;
+      logContainer.appendChild(line);
+      
+      // Nur max 6 Zeilen behalten für sauberes Scrolling
+      if (logContainer.children.length > 6) {
+        logContainer.removeChild(logContainer.firstChild);
+      }
+    }
+
+    // Pseudo-Progress & Fast Logs beim Start
+    const logInterval = setInterval(() => {
+      if (currentLogIdx < techLogs.length - 1) {
+        addLogMessage(techLogs[currentLogIdx]);
+        currentLogIdx++;
+        const pct = Math.min(90, Math.round((currentLogIdx / techLogs.length) * 100));
+        progressFill.style.width = pct + '%';
+      }
+    }, 280);
 
     // Dev Tools Functions
     async function purgeCacheAndSW() {
@@ -243,11 +364,25 @@
     async function init() {
       try {
         await setupCamera();
+        
+        // Modell-Ladevorgang
         model = await mobilenet.load();
-        loading.style.display = 'none';
-        actionBtn.disabled = false;
+        
+        // Abschluss-Log ausgeben & Balken auf 100%
+        clearInterval(logInterval);
+        addLogMessage("Model status: READY.");
+        progressFill.style.width = '100%';
+
+        // Kurze Verzögerung für das "Gefühl der Fertigstellung", dann Overlay ausblenden
+        setTimeout(() => {
+          loading.style.display = 'none';
+          actionBtn.disabled = false;
+        }, 300);
+
       } catch(e) {
-        loading.innerText = "Kamera-Zugriff erforderlich!";
+        clearInterval(logInterval);
+        addLogMessage("ERROR: Camera or WebGL Init Failed!");
+        progressFill.style.background = '#ff4444';
       }
     }
 
