@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ASZ Batterie-Sortierer</title>
+  <title>Re:Sort — ASZ Batterie-Sortierer</title>
   
   <meta name="theme-color" content="#8bc34a">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -65,7 +65,7 @@
       <rect x="42" y="22" width="16" height="8" rx="2" fill="#8bc34a"/>
       <path d="M 38 55 L 52 38 L 48 53 L 62 45 L 48 62 L 52 48 Z" fill="#ffc107"/>
     </svg>
-    <h1>ASZ Batterie-Sortierer</h1>
+    <h1>Re:Sort</h1>
   </header>
 
   <p class="sub">Vorsortierung nach O.Ö. LAVU Richtlinien</p>
@@ -120,13 +120,13 @@
 
     const aszRules = {
       geraete: {
-        title: "Gerätebatterien",
-        art: "Art.Nr. 4110",
+        title: "Gerätebatterien / Akkus",
+        art: "Art.Nr. 4110 / 4112",
         css: "geraete",
         icon: containerIcons.box_green,
-        containerName: "Grüne Sammelbox für Haushaltsbatterien",
-        info: "• Konsumbatterien (Alkali, Zink-Kohle)<br>• NiCd / NiMH Werkzeugakkus<br>• Knopfzellen & Weidezaunbatterien",
-        warn: "💡 Hinweis: Kontaktfläche/Pole bei Knopfzellen abkleben."
+        containerName: "Grüne Sammelbox oder Blaue Li-Box",
+        info: "• Werkzeugakkus (NiCd, NiMH, Li-Ion)<br>• Konsumbatterien & Knopfzellen<br>• Geräteakkus bis 5 kg",
+        warn: "💡 Hinweis: Bitte Kontakte/Pole mit Klebeband abkleben!"
       },
       li_unbeschaedigt: {
         title: "Lithium unbeschädigt",
@@ -134,7 +134,7 @@
         css: "li-ok",
         icon: containerIcons.box_blue,
         containerName: "Blaue Spezialbox (Lithium < 5 kg)",
-        info: "• Intakte Li-Ion Akkus bis 5 kg<br>• Entnehmbare Akkus aus Handys, Laptops, Werkzeugen & Gartengeräten",
+        info: "• Intakte Li-Ion Akkus (E-Bike, Laptops, Werkzeuge)<br>• Ausgebaut aus Geräten",
         warn: "🔒 Sicherheit: Pole und freistehende Drähte zwingend abkleben!"
       },
       li_beschaedigt: {
@@ -143,8 +143,8 @@
         css: "li-dmg",
         icon: containerIcons.box_red,
         containerName: "Rote Brandschutzbox / Beutel",
-        info: "• Verformte, erhitzte oder beschädigte LiPo/Li-Ion Akkus<br>• Akkus aus E-Bikes / E-Scootern bis 25 kg",
-        warn: "🚨 Sicherheit: In Kunststoffbeutel einpacken & Pole abkleben!"
+        info: "• Verformte, aufgeblähte, erhitzte oder beschädigte Akkus<br>• E-Scooter / E-Bike Akkus beschädigt",
+        warn: "🚨 Sicherheit: In Einzel-Kunststoffbeutel einpacken & Pole abkleben!"
       },
       starter: {
         title: "Starterbatterien",
@@ -153,7 +153,7 @@
         icon: containerIcons.tub_yellow,
         containerName: "Säurefeste Kunststoffwanne",
         info: "• Bleiakkumulatoren mit Säurefüllung<br>• Auto-, Moped-, Traktor- & LKW-Batterien",
-        warn: "⚖️ Sicherheit: Säurefest lagern, + Pole in der obersten Reihe abkleben."
+        warn: "⚖️ Sicherheit: Säurefest lagern, + Pole abkleben."
       }
     };
 
@@ -198,47 +198,49 @@
         btnText.innerText = "Analysiere...";
         
         const predictions = await model.classify(video);
+
+        // 1. Liste von reinen Hintergrund-Begriffen
+        const backgroundTerms = ['tile', 'floor', 'wall', 'wood', 'table', 'carpet', 'pattern', 'pavement', 'concrete'];
         
-        // Schlagwörter zur Batterie- / Geräteerkennung
-        const batteryKeywords = ['battery', 'power bank', 'cellular phone', 'ipod', 'laptop', 'accumulator', 'remote control', 'cassette', 'electric'];
-        
-        // Suche nach einer Trefferklasse mit ausreichend Vertrauen
-        const validPrediction = predictions.find(p => 
-          batteryKeywords.some(keyword => p.className.toLowerCase().includes(keyword)) && p.probability > 0.15
-        );
+        // Prüfen, ob der Top-Treffer NUR ein flacher Hintergrund ist
+        const topClass = predictions[0].className.toLowerCase();
+        const isJustBackground = backgroundTerms.some(bg => topClass.includes(bg)) && predictions[0].probability > 0.6;
 
-        if (validPrediction) {
-          const top = validPrediction.className.toLowerCase();
-          let rule = aszRules.geraete;
-
-          // Erst wenn ein relevantes Objekt erkannt wurde, prüft die App die Beschädigung
-          if (damagedChk.checked) {
-            rule = aszRules.li_beschaedigt;
-          } else if (top.includes('car battery') || top.includes('accumulator')) {
-            rule = aszRules.starter;
-          } else if (top.includes('power bank') || top.includes('cellular phone') || top.includes('ipod') || top.includes('laptop')) {
-            rule = aszRules.li_unbeschaedigt;
-          }
-
-          result.className = `card active ${rule.css}`;
-          artNr.innerText = rule.art;
-          targetTitle.innerText = rule.title;
-          containerSvgSlot.innerHTML = rule.icon;
-          containerDesc.innerText = rule.containerName;
-          targetInfo.innerHTML = rule.info;
-          targetWarn.innerHTML = rule.warn;
-
-          isScanMode = false;
-          actionBtn.className = "btn-action btn-reset-mode";
-          btnIcon.innerText = "🔄";
-          btnText.innerText = "Neuer Scan";
-        } else {
-          alert("Keine Batterie oder Gerät erkannt. Bitte halte das Objekt näher vor die Kamera.");
+        if (isJustBackground) {
+          alert("Kein Objekt erkannt! Bitte halte den Akku direkt vor die Kamera.");
           btnText.innerText = "Scan ausführen";
+          actionBtn.disabled = false;
+          return;
         }
-        
+
+        // 2. Regelzuordnung treffen
+        let rule = aszRules.geraete; // Standard-Fallback für Werkzeugakkus
+
+        if (damagedChk.checked) {
+          rule = aszRules.li_beschaedigt;
+        } else if (topClass.includes('car battery') || topClass.includes('accumulator')) {
+          rule = aszRules.starter;
+        } else if (topClass.includes('power bank') || topClass.includes('laptop') || topClass.includes('cellular phone')) {
+          rule = aszRules.li_unbeschaedigt;
+        }
+
+        // 3. UI Aktualisieren
+        result.className = `card active ${rule.css}`;
+        artNr.innerText = rule.art;
+        targetTitle.innerText = rule.title;
+        containerSvgSlot.innerHTML = rule.icon;
+        containerDesc.innerText = rule.containerName;
+        targetInfo.innerHTML = rule.info;
+        targetWarn.innerHTML = rule.warn;
+
+        isScanMode = false;
+        actionBtn.className = "btn-action btn-reset-mode";
+        btnIcon.innerText = "🔄";
+        btnText.innerText = "Neuer Scan";
         actionBtn.disabled = false;
+
       } else {
+        // Reset
         result.className = "card";
         damagedChk.checked = false;
         
