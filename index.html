@@ -11,7 +11,6 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" id="favicon" type="image/svg+xml" href="">
 
-  <!-- Standard TensorFlow CDN mit unpkg Fallback-Option -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
 
@@ -40,6 +39,75 @@
     .cam-box { position: relative; width: 100%; max-width: 440px; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
     video { width: 100%; height: 100%; object-fit: cover; }
     
+    /* VISUAL SCANNER HUD OVERLAY */
+    .scanner-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 16px;
+      border: 2px solid rgba(139, 195, 74, 0.3);
+      border-radius: 12px;
+      transition: border-color 0.2s ease;
+    }
+
+    .scanner-overlay.detected {
+      border-color: #00ff66;
+      box-shadow: inset 0 0 25px rgba(0, 255, 102, 0.4);
+    }
+
+    .scan-reticle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 140px;
+      height: 140px;
+      border: 1px dashed rgba(255, 255, 255, 0.4);
+      border-radius: 12px;
+    }
+
+    .scan-reticle::before, .scan-reticle::after {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-color: #8bc34a;
+      border-style: solid;
+    }
+    .scan-reticle::before { top: -2px; left: -2px; border-width: 3px 0 0 3px; }
+    .scan-reticle::after { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; }
+
+    .scan-line {
+      position: absolute;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #8bc34a, transparent);
+      box-shadow: 0 0 8px #8bc34a;
+      top: 0;
+      animation: scanAnim 2s infinite linear;
+    }
+
+    @keyframes scanAnim {
+      0% { top: 5%; opacity: 0.2; }
+      50% { opacity: 1; }
+      100% { top: 95%; opacity: 0.2; }
+    }
+
+    .scanner-status-tag {
+      align-self: flex-start;
+      background: rgba(0, 0, 0, 0.65);
+      color: #8bc34a;
+      font-family: monospace;
+      font-size: 0.65rem;
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(139, 195, 74, 0.4);
+      backdrop-filter: blur(4px);
+    }
+
     #loading { 
       position: absolute; 
       inset: 0; 
@@ -54,100 +122,28 @@
       border: 1px solid rgba(0, 255, 102, 0.3);
     }
     
-    .loader-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px dashed rgba(0, 255, 102, 0.4);
-      padding-bottom: 6px;
-      font-size: 0.7rem;
-      font-weight: bold;
-      letter-spacing: 0.5px;
-    }
-    
-    .loader-status {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .loader-spinner {
-      width: 10px;
-      height: 10px;
-      flex-shrink: 0;
-      border: 2px solid #00ff66;
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
-    }
-    
+    .loader-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(0, 255, 102, 0.4); padding-bottom: 6px; font-size: 0.7rem; font-weight: bold; }
+    .loader-status { display: flex; align-items: center; gap: 6px; }
+    .loader-spinner { width: 10px; height: 10px; border: 2px solid #00ff66; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .loader-logs {
-      font-size: 0.62rem;
-      line-height: 1.4;
-      color: #00cc55;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      height: 110px;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
-
-    .loader-logs div {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .loader-logs div::before {
-      content: "> ";
-      color: #8bc34a;
-    }
-
-    .loader-footer {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-top: 4px;
-    }
-
-    .loader-progress-bar {
-      flex: 1;
-      height: 5px;
-      background: #112211;
-      border-radius: 3px;
-      overflow: hidden;
-      border: 1px solid #004411;
-    }
-
-    .loader-progress-fill {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, #4caf50, #00ff66);
-      transition: width 0.15s ease-out;
-    }
-
-    .loader-pct {
-      font-size: 0.65rem;
-      font-weight: bold;
-      width: 32px;
-      text-align: right;
-    }
+    .loader-logs { font-size: 0.62rem; line-height: 1.4; color: #00cc55; display: flex; flex-direction: column; justify-content: flex-end; height: 110px; overflow: hidden; }
+    .loader-logs div::before { content: "> "; color: #8bc34a; }
+    .loader-footer { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+    .loader-progress-bar { flex: 1; height: 5px; background: #112211; border-radius: 3px; overflow: hidden; border: 1px solid #004411; }
+    .loader-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #4caf50, #00ff66); transition: width 0.15s ease-out; }
+    .loader-pct { font-size: 0.65rem; font-weight: bold; width: 32px; text-align: right; }
 
     .options-box { width: 100%; max-width: 440px; margin-top: 12px; background: #1e1e1e; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
     .options-box label { font-size: 0.85rem; color: #ff9800; font-weight: bold; cursor: pointer; }
 
     .btn-action { width: 100%; max-width: 440px; margin-top: 12px; padding: 14px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .btn-scan-mode { background: #8bc34a; color: #000; }
+    .btn-scan-mode { background: #333; color: #8bc34a; border: 1px solid #8bc34a; }
     .btn-reset-mode { background: #2196f3; color: #fff; }
-    .btn-action:disabled { background: #333; color: #666; cursor: not-allowed; }
+    .btn-action:disabled { background: #222; color: #555; border-color: #333; cursor: not-allowed; }
 
     .card { width: 100%; max-width: 440px; margin-top: 14px; padding: 16px; border-radius: 12px; background: #1e1e1e; border: 2px solid #444; display: none; }
     .card.active { display: block; }
-    
     .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
     .art-nr { font-size: 0.75rem; font-weight: bold; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,0.15); }
     
@@ -183,12 +179,19 @@
     <h1>Re:Charge</h1>
   </header>
 
-  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.5</div>
+  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.6</div>
 
   <p class="sub">Vorsortierung nach O.Ö. LAVU Richtlinien</p>
 
   <div class="cam-box">
     <video id="webcam" autoplay playsinline muted></video>
+    
+    <!-- VISUELLES HUD -->
+    <div class="scanner-overlay" id="hud-overlay">
+      <div class="scan-line" id="scan-line"></div>
+      <div class="scan-reticle"></div>
+      <div class="scanner-status-tag" id="hud-tag">AUTO SCANNING...</div>
+    </div>
     
     <div id="loading">
       <div class="loader-header">
@@ -218,8 +221,8 @@
   </div>
 
   <button class="btn-action btn-scan-mode" id="action-btn" disabled>
-    <span id="btn-icon">📷</span>
-    <span id="btn-text">Scan ausführen</span>
+    <span id="btn-icon">📡</span>
+    <span id="btn-text">Auto-Scan Aktiv</span>
   </button>
 
   <div id="result" class="card">
@@ -246,7 +249,7 @@
   </details>
 
   <script>
-    const APP_VERSION = "v1.0.5-dev";
+    const APP_VERSION = "v1.0.6-dev";
     document.getElementById('dev-version-banner').innerText = `DEV VERSION: ${APP_VERSION}`;
 
     const logContainer = document.getElementById('log-container');
@@ -254,6 +257,9 @@
     const progressPct = document.getElementById('progress-pct');
     const statusText = document.getElementById('loader-status-text');
     const spinner = document.getElementById('loader-spinner');
+    const hudOverlay = document.getElementById('hud-overlay');
+    const hudTag = document.getElementById('hud-tag');
+    const scanLine = document.getElementById('scan-line');
 
     function log(text, isError = false) {
       console.log(`[Re:Charge] ${text}`);
@@ -326,7 +332,8 @@
     const targetWarn = document.getElementById('target-warn');
 
     let model = null;
-    let isScanMode = true;
+    let isAutoScanning = true;
+    let lastScanTime = 0;
 
     async function initCamera() {
       log("Fordere Kamera an...");
@@ -342,8 +349,7 @@
         setProgress(50);
         return true;
       } catch (err) {
-        log("ERR: Kamera-Sperre / FEHLER!", true);
-        console.error(err);
+        log("ERR: Kamera-Sperre!", true);
         return false;
       }
     }
@@ -352,42 +358,77 @@
       log("Lade TF.js Engine...");
       setProgress(60);
       try {
-        if (typeof mobilenet === 'undefined') {
-          throw new Error("MobileNet Script nicht geladen (CDN blocked?)");
-        }
-        log("Lade MobileNet Weights...");
+        if (typeof mobilenet === 'undefined') throw new Error("MobileNet CDN blockiert");
+        log("Lade Weights...");
         setProgress(85);
-        
-        // Timeout-Schutz für das Laden der Modell-Gewichte
-        const modelPromise = mobilenet.load({ version: 2, alpha: 0.5 });
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("Netzwerk-Timeout")), 10000)
-        );
-
-        model = await Promise.race([modelPromise, timeoutPromise]);
-        
+        model = await mobilenet.load({ version: 2, alpha: 0.5 });
         log("KI Modell OK.");
         setProgress(100);
         return true;
       } catch (err) {
         log(`ERR: ${err.message}`, true);
-        console.error(err);
         return false;
       }
     }
 
-    async function main() {
-      const camOk = await initCamera();
-      if (!camOk) {
-        statusText.innerText = "CAM ERR";
-        progressFill.style.background = "#ff4444";
-        if (spinner) spinner.style.display = "none";
-        return;
-      }
+    function triggerSnap(rule) {
+      isAutoScanning = false;
+      hudOverlay.classList.add('detected');
+      hudTag.innerText = "OBJECT SNAP!";
+      scanLine.style.display = 'none';
 
-      const modelOk = await initModel();
-      if (!modelOk) {
-        statusText.innerText = "NET ERR";
+      result.className = `card active ${rule.css}`;
+      artNr.innerText = rule.art;
+      targetTitle.innerText = rule.title;
+      containerSvgSlot.innerHTML = rule.icon;
+      containerDesc.innerText = rule.containerName;
+      targetInfo.innerHTML = rule.info;
+      targetWarn.innerHTML = rule.warn;
+
+      actionBtn.className = "btn-action btn-reset-mode";
+      btnIcon.innerText = "🔄";
+      btnText.innerText = "Neuer Scan";
+      actionBtn.disabled = false;
+    }
+
+    async function autoScanLoop(timestamp) {
+      if (isAutoScanning && model && video.readyState === 4) {
+        // Drosselung auf ca. alle 400ms für geschmeidige Performance
+        if (timestamp - lastScanTime > 400) {
+          lastScanTime = timestamp;
+          try {
+            const predictions = await model.classify(video);
+            const targetClass = predictions[0].className.toLowerCase();
+            const prob = predictions[0].probability;
+
+            hudTag.innerText = `SCANNING... (${Math.round(prob * 100)}%)`;
+
+            // Erkennungs-Keywords für Akkus & Batterien
+            const batteryKeywords = ['battery', 'accumulator', 'power bank', 'cellular phone', 'laptop', 'ipod'];
+            const matchesBattery = batteryKeywords.some(kw => targetClass.includes(kw));
+
+            if (damagedChk.checked) {
+              triggerSnap(aszRules.li_beschaedigt);
+            } else if (matchesBattery && prob > 0.45) {
+              if (targetClass.includes('car battery') || targetClass.includes('accumulator')) {
+                triggerSnap(aszRules.starter);
+              } else if (targetClass.includes('power bank') || targetClass.includes('laptop') || targetClass.includes('cellular phone')) {
+                triggerSnap(aszRules.li_unbeschaedigt);
+              } else {
+                triggerSnap(aszRules.geraete);
+              }
+            }
+          } catch (e) {
+            console.warn("Scan-Loop Skip:", e);
+          }
+        }
+      }
+      requestAnimationFrame(autoScanLoop);
+    }
+
+    async function main() {
+      if (!(await initCamera()) || !(await initModel())) {
+        statusText.innerText = "ERR";
         progressFill.style.background = "#ff4444";
         if (spinner) spinner.style.display = "none";
         return;
@@ -397,65 +438,23 @@
       setTimeout(() => {
         loading.style.display = 'none';
         actionBtn.disabled = false;
+        requestAnimationFrame(autoScanLoop);
       }, 300);
     }
 
-    actionBtn.addEventListener('click', async () => {
-      if (isScanMode) {
-        actionBtn.disabled = true;
-        btnText.innerText = "Analysiere...";
-        
-        try {
-          const predictions = await model.classify(video);
-          const backgroundTerms = ['tile', 'floor', 'wall', 'wood', 'table', 'carpet', 'pattern', 'pavement', 'concrete'];
-          
-          const topClass = predictions[0].className.toLowerCase();
-          const isJustBackground = backgroundTerms.some(bg => topClass.includes(bg)) && predictions[0].probability > 0.6;
-
-          if (isJustBackground) {
-            alert("Kein Objekt erkannt! Bitte halte den Akku direkt vor die Kamera.");
-            btnText.innerText = "Scan ausführen";
-            actionBtn.disabled = false;
-            return;
-          }
-
-          let rule = aszRules.geraete;
-          if (damagedChk.checked) {
-            rule = aszRules.li_beschaedigt;
-          } else if (topClass.includes('car battery') || topClass.includes('accumulator')) {
-            rule = aszRules.starter;
-          } else if (topClass.includes('power bank') || topClass.includes('laptop') || topClass.includes('cellular phone')) {
-            rule = aszRules.li_unbeschaedigt;
-          }
-
-          result.className = `card active ${rule.css}`;
-          artNr.innerText = rule.art;
-          targetTitle.innerText = rule.title;
-          containerSvgSlot.innerHTML = rule.icon;
-          containerDesc.innerText = rule.containerName;
-          targetInfo.innerHTML = rule.info;
-          targetWarn.innerHTML = rule.warn;
-
-          isScanMode = false;
-          actionBtn.className = "btn-action btn-reset-mode";
-          btnIcon.innerText = "🔄";
-          btnText.innerText = "Neuer Scan";
-          actionBtn.disabled = false;
-
-        } catch (e) {
-          alert("Fehler bei der Bildanalyse!");
-          actionBtn.disabled = false;
-          btnText.innerText = "Scan ausführen";
-        }
-
-      } else {
+    actionBtn.addEventListener('click', () => {
+      if (!isAutoScanning) {
+        // Reset zum Weiterscannen
         result.className = "card";
         damagedChk.checked = false;
-        
-        isScanMode = true;
+        hudOverlay.classList.remove('detected');
+        hudTag.innerText = "AUTO SCANNING...";
+        scanLine.style.display = 'block';
+
         actionBtn.className = "btn-action btn-scan-mode";
-        btnIcon.innerText = "📷";
-        btnText.innerText = "Scan ausführen";
+        btnIcon.innerText = "📡";
+        btnText.innerText = "Auto-Scan Aktiv";
+        isAutoScanning = true;
       }
     });
 
