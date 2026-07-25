@@ -39,7 +39,6 @@
     .cam-box { position: relative; width: 100%; max-width: 440px; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
     video { width: 100%; height: 100%; object-fit: cover; }
     
-    /* VISUAL SCANNER HUD OVERLAY */
     .scanner-overlay {
       position: absolute;
       inset: 0;
@@ -53,14 +52,8 @@
       transition: all 0.2s ease;
     }
 
-    .scanner-overlay.manual {
-      border-color: rgba(255, 152, 0, 0.4);
-    }
-
-    .scanner-overlay.detected {
-      border-color: #00ff66;
-      box-shadow: inset 0 0 25px rgba(0, 255, 102, 0.4);
-    }
+    .scanner-overlay.manual { border-color: rgba(255, 152, 0, 0.4); }
+    .scanner-overlay.detected { border-color: #00ff66; box-shadow: inset 0 0 25px rgba(0, 255, 102, 0.4); }
 
     .scan-reticle {
       position: absolute;
@@ -184,7 +177,7 @@
     <h1>Re:Charge</h1>
   </header>
 
-  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.10</div>
+  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.11</div>
 
   <p class="sub">Vorsortierung nach O.Ö. LAVU Richtlinien</p>
 
@@ -253,7 +246,7 @@
   </details>
 
   <script>
-    const APP_VERSION = "v1.0.10-dev";
+    const APP_VERSION = "v1.0.11-dev";
     document.getElementById('dev-version-banner').innerText = `DEV VERSION: ${APP_VERSION}`;
 
     const logContainer = document.getElementById('log-container');
