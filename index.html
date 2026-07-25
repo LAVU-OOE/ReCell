@@ -177,7 +177,7 @@
     <h1>Re:Charge</h1>
   </header>
 
-  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.11</div>
+  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.12</div>
 
   <p class="sub">Vorsortierung nach O.Ö. LAVU Richtlinien</p>
 
@@ -246,266 +246,273 @@
   </details>
 
   <script>
-    const APP_VERSION = "v1.0.11-dev";
-    document.getElementById('dev-version-banner').innerText = `DEV VERSION: ${APP_VERSION}`;
+    // Schutz gegen Mehrfach-Ausführung im Browser
+    if (window.__RECHARGE_INIT__) {
+      console.warn("Script bereits geladen. Überspringe zweite Initialisierung.");
+    } else {
+      window.__RECHARGE_INIT__ = true;
 
-    const logContainer = document.getElementById('log-container');
-    const progressFill = document.getElementById('progress-fill');
-    const progressPct = document.getElementById('progress-pct');
-    const statusText = document.getElementById('loader-status-text');
-    const spinner = document.getElementById('loader-spinner');
-    const hudOverlay = document.getElementById('hud-overlay');
-    const hudTag = document.getElementById('hud-tag');
-    const scanLine = document.getElementById('scan-line');
+      const APP_VERSION = "v1.0.12-dev";
+      document.getElementById('dev-version-banner').innerText = `DEV VERSION: ${APP_VERSION}`;
 
-    function log(text, isError = false) {
-      console.log(`[Re:Charge] ${text}`);
-      const line = document.createElement('div');
-      line.innerText = text;
-      if (isError) line.style.color = '#ff6666';
-      logContainer.appendChild(line);
-      if (logContainer.children.length > 5) {
-        logContainer.removeChild(logContainer.firstChild);
+      const logContainer = document.getElementById('log-container');
+      const progressFill = document.getElementById('progress-fill');
+      const progressPct = document.getElementById('progress-pct');
+      const statusText = document.getElementById('loader-status-text');
+      const spinner = document.getElementById('loader-spinner');
+      const hudOverlay = document.getElementById('hud-overlay');
+      const hudTag = document.getElementById('hud-tag');
+      const scanLine = document.getElementById('scan-line');
+
+      function log(text, isError = false) {
+        console.log(`[Re:Charge] ${text}`);
+        const line = document.createElement('div');
+        line.innerText = text;
+        if (isError) line.style.color = '#ff6666';
+        logContainer.appendChild(line);
+        if (logContainer.children.length > 5) {
+          logContainer.removeChild(logContainer.firstChild);
+        }
       }
-    }
 
-    function setProgress(pct) {
-      progressFill.style.width = pct + '%';
-      progressPct.innerText = pct + '%';
-    }
+      function setProgress(pct) {
+        progressFill.style.width = pct + '%';
+        progressPct.innerText = pct + '%';
+      }
 
-    async function purgeCacheAndSW() {
+      window.purgeCacheAndSW = async function() {
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          for (let reg of registrations) { await reg.unregister(); }
+        }
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          for (let key of keys) { await caches.delete(key); }
+        }
+        alert(`Cache & Worker bereinigt!`);
+        window.location.reload(true);
+      };
+
+      window.forceReload = function() { window.location.reload(true); };
+
+      const svgElement = document.getElementById('app-icon-svg');
+      const svgString = new XMLSerializer().serializeToString(svgElement);
+      const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
+      document.getElementById('favicon').href = URL.createObjectURL(svgBlob);
+
       if ('serviceWorker' in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        for (let reg of registrations) { await reg.unregister(); }
+        navigator.serviceWorker.register('sw.js').catch(err => console.log('SW:', err));
       }
-      if ('caches' in window) {
-        const keys = await caches.keys();
-        for (let key of keys) { await caches.delete(key); }
-      }
-      alert(`Cache & Worker bereinigt!`);
-      window.location.reload(true);
-    }
 
-    function forceReload() { window.location.reload(true); }
+      const containerIcons = {
+        box_green: `<svg viewBox="0 0 100 100"><rect x="10" y="35" width="80" height="50" rx="6" fill="#4caf50"/><path d="M 5 30 L 95 30 L 90 20 L 10 20 Z" fill="#388e3c"/><text x="50" y="65" font-size="14" fill="#fff" font-weight="bold" text-anchor="middle">BOX</text></svg>`,
+        box_blue: `<svg viewBox="0 0 100 100"><rect x="10" y="35" width="80" height="50" rx="6" fill="#2196f3"/><path d="M 5 30 L 95 30 L 90 20 L 10 20 Z" fill="#1976d2"/><text x="50" y="65" font-size="14" fill="#fff" font-weight="bold" text-anchor="middle">Li-OK</text></svg>`,
+        box_red: `<svg viewBox="0 0 100 100"><rect x="10" y="35" width="80" height="50" rx="6" fill="#f44336"/><path d="M 5 30 L 95 30 L 90 20 L 10 20 Z" fill="#d32f2f"/><text x="50" y="60" font-size="11" fill="#fff" font-weight="bold" text-anchor="middle">GEFAHR</text></svg>`,
+        tub_yellow: `<svg viewBox="0 0 100 100"><path d="M 10 30 L 90 30 L 80 80 L 20 80 Z" fill="#ff9800"/><rect x="5" y="22" width="90" height="10" rx="3" fill="#f57c00"/><text x="50" y="60" font-size="11" fill="#fff" font-weight="bold" text-anchor="middle">WANNE</text></svg>`
+      };
 
-    const svgElement = document.getElementById('app-icon-svg');
-    const svgString = new XMLSerializer().serializeToString(svgElement);
-    const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
-    document.getElementById('favicon').href = URL.createObjectURL(svgBlob);
+      const aszRules = {
+        geraete: { title: "Gerätebatterien / Akkus", art: "Art.Nr. 4110 / 4112", css: "geraete", icon: containerIcons.box_green, containerName: "Grüne Sammelbox oder Blaue Li-Box", info: "• Werkzeugakkus (NiCd, NiMH, Li-Ion)<br>• Konsumbatterien & Knopfzellen<br>• Geräteakkus bis 5 kg", warn: "💡 Hinweis: Bitte Kontakte/Pole mit Klebeband abkleben!" },
+        li_unbeschaedigt: { title: "Lithium unbeschädigt", art: "Art.Nr. 4112", css: "li-ok", icon: containerIcons.box_blue, containerName: "Blaue Spezialbox (Lithium < 5 kg)", info: "• Intakte Li-Ion Akkus (E-Bike, Laptops, Werkzeuge)<br>• Ausgebaut aus Geräten", warn: "🔒 Sicherheit: Pole und freistehende Drähte zwingend abkleben!" },
+        li_beschaedigt: { title: "Lithium beschädigt", art: "Art.Nr. 4111", css: "li-dmg", icon: containerIcons.box_red, containerName: "Rote Brandschutzbox / Beutel", info: "• Verformte, aufgeblähte, erhitzte oder beschädigte Akkus<br>• E-Scooter / E-Bike Akkus beschädigt", warn: "🚨 Sicherheit: In Einzel-Kunststoffbeutel einpacken & Pole abkleben!" },
+        starter: { title: "Starterbatterien", art: "Art.Nr. 4100", css: "starter", icon: containerIcons.tub_yellow, containerName: "Säurefeste Kunststoffwanne", info: "• Bleiakkumulatoren mit Säurefüllung<br>• Auto-, Moped-, Traktor- & LKW-Batterien", warn: "⚖️ Sicherheit: Säurefest lagern, + Pole abkleben." }
+      };
 
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(err => console.log('SW:', err));
-    }
+      const video = document.getElementById('webcam');
+      const actionBtn = document.getElementById('action-btn');
+      const btnIcon = document.getElementById('btn-icon');
+      const btnText = document.getElementById('btn-text');
+      const loading = document.getElementById('loading');
+      const damagedChk = document.getElementById('damaged-chk');
+      
+      const result = document.getElementById('result');
+      const artNr = document.getElementById('art-nr');
+      const targetTitle = document.getElementById('target-title');
+      const containerSvgSlot = document.getElementById('container-svg-slot');
+      const containerDesc = document.getElementById('container-desc');
+      const targetInfo = document.getElementById('target-info');
+      const targetWarn = document.getElementById('target-warn');
 
-    const containerIcons = {
-      box_green: `<svg viewBox="0 0 100 100"><rect x="10" y="35" width="80" height="50" rx="6" fill="#4caf50"/><path d="M 5 30 L 95 30 L 90 20 L 10 20 Z" fill="#388e3c"/><text x="50" y="65" font-size="14" fill="#fff" font-weight="bold" text-anchor="middle">BOX</text></svg>`,
-      box_blue: `<svg viewBox="0 0 100 100"><rect x="10" y="35" width="80" height="50" rx="6" fill="#2196f3"/><path d="M 5 30 L 95 30 L 90 20 L 10 20 Z" fill="#1976d2"/><text x="50" y="65" font-size="14" fill="#fff" font-weight="bold" text-anchor="middle">Li-OK</text></svg>`,
-      box_red: `<svg viewBox="0 0 100 100"><rect x="10" y="35" width="80" height="50" rx="6" fill="#f44336"/><path d="M 5 30 L 95 30 L 90 20 L 10 20 Z" fill="#d32f2f"/><text x="50" y="60" font-size="11" fill="#fff" font-weight="bold" text-anchor="middle">GEFAHR</text></svg>`,
-      tub_yellow: `<svg viewBox="0 0 100 100"><path d="M 10 30 L 90 30 L 80 80 L 20 80 Z" fill="#ff9800"/><rect x="5" y="22" width="90" height="10" rx="3" fill="#f57c00"/><text x="50" y="60" font-size="11" fill="#fff" font-weight="bold" text-anchor="middle">WANNE</text></svg>`
-    };
+      let model = null;
+      let scanState = 'AUTO';
+      let lastScanTime = 0;
 
-    const aszRules = {
-      geraete: { title: "Gerätebatterien / Akkus", art: "Art.Nr. 4110 / 4112", css: "geraete", icon: containerIcons.box_green, containerName: "Grüne Sammelbox oder Blaue Li-Box", info: "• Werkzeugakkus (NiCd, NiMH, Li-Ion)<br>• Konsumbatterien & Knopfzellen<br>• Geräteakkus bis 5 kg", warn: "💡 Hinweis: Bitte Kontakte/Pole mit Klebeband abkleben!" },
-      li_unbeschaedigt: { title: "Lithium unbeschädigt", art: "Art.Nr. 4112", css: "li-ok", icon: containerIcons.box_blue, containerName: "Blaue Spezialbox (Lithium < 5 kg)", info: "• Intakte Li-Ion Akkus (E-Bike, Laptops, Werkzeuge)<br>• Ausgebaut aus Geräten", warn: "🔒 Sicherheit: Pole und freistehende Drähte zwingend abkleben!" },
-      li_beschaedigt: { title: "Lithium beschädigt", art: "Art.Nr. 4111", css: "li-dmg", icon: containerIcons.box_red, containerName: "Rote Brandschutzbox / Beutel", info: "• Verformte, aufgeblähte, erhitzte oder beschädigte Akkus<br>• E-Scooter / E-Bike Akkus beschädigt", warn: "🚨 Sicherheit: In Einzel-Kunststoffbeutel einpacken & Pole abkleben!" },
-      starter: { title: "Starterbatterien", art: "Art.Nr. 4100", css: "starter", icon: containerIcons.tub_yellow, containerName: "Säurefeste Kunststoffwanne", info: "• Bleiakkumulatoren mit Säurefüllung<br>• Auto-, Moped-, Traktor- & LKW-Batterien", warn: "⚖️ Sicherheit: Säurefest lagern, + Pole abkleben." }
-    };
+      const objectKeywords = ['battery', 'accumulator', 'power bank', 'cellular', 'phone', 'laptop', 'ipod', 'charger', 'pack', 'remote', 'mouse', 'calculator', 'disk', 'card', 'box', 'packet', 'electronics'];
+      const backgroundTerms = ['tile', 'floor', 'wall', 'wood', 'table', 'carpet', 'pattern', 'pavement', 'concrete', 'cloth', 'paper', 'ceiling', 'sky'];
 
-    const video = document.getElementById('webcam');
-    const actionBtn = document.getElementById('action-btn');
-    const btnIcon = document.getElementById('btn-icon');
-    const btnText = document.getElementById('btn-text');
-    const loading = document.getElementById('loading');
-    const damagedChk = document.getElementById('damaged-chk');
-    
-    const result = document.getElementById('result');
-    const artNr = document.getElementById('art-nr');
-    const targetTitle = document.getElementById('target-title');
-    const containerSvgSlot = document.getElementById('container-svg-slot');
-    const containerDesc = document.getElementById('container-desc');
-    const targetInfo = document.getElementById('target-info');
-    const targetWarn = document.getElementById('target-warn');
-
-    let model = null;
-    let scanState = 'AUTO';
-    let lastScanTime = 0;
-
-    const objectKeywords = ['battery', 'accumulator', 'power bank', 'cellular', 'phone', 'laptop', 'ipod', 'charger', 'pack', 'remote', 'mouse', 'calculator', 'disk', 'card', 'box', 'packet', 'electronics'];
-    const backgroundTerms = ['tile', 'floor', 'wall', 'wood', 'table', 'carpet', 'pattern', 'pavement', 'concrete', 'cloth', 'paper', 'ceiling', 'sky'];
-
-    async function initCamera() {
-      log("Fordere Kamera an...");
-      setProgress(20);
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } }
-        });
-        video.srcObject = stream;
-        await new Promise((res) => video.onloadedmetadata = res);
-        await video.play();
-        log("Kamera OK.");
-        setProgress(50);
-        return true;
-      } catch (err) {
-        log("ERR: Kamera-Sperre!", true);
-        return false;
-      }
-    }
-
-    async function initModel() {
-      log("Lade TF.js Engine...");
-      setProgress(60);
-      try {
-        if (typeof mobilenet === 'undefined') throw new Error("MobileNet CDN blockiert");
-        log("Lade Weights...");
-        setProgress(85);
-        model = await mobilenet.load({ version: 2, alpha: 0.5 });
-        log("KI Modell OK.");
-        setProgress(100);
-        return true;
-      } catch (err) {
-        log(`ERR: ${err.message}`, true);
-        return false;
-      }
-    }
-
-    function triggerSnap(rule) {
-      scanState = 'RESULT';
-      hudOverlay.className = 'scanner-overlay detected';
-      hudTag.innerText = "OBJECT SNAP!";
-      scanLine.style.display = 'none';
-
-      result.className = `card active ${rule.css}`;
-      artNr.innerText = rule.art;
-      targetTitle.innerText = rule.title;
-      containerSvgSlot.innerHTML = rule.icon;
-      containerDesc.innerText = rule.containerName;
-      targetInfo.innerHTML = rule.info;
-      targetWarn.innerHTML = rule.warn;
-
-      actionBtn.className = "btn-action btn-reset-mode";
-      btnIcon.innerText = "🔄";
-      btnText.innerText = "Neuer Scan";
-      actionBtn.disabled = false;
-    }
-
-    async function executeSingleClassify() {
-      if (!model || video.readyState !== 4) return;
-      try {
-        const predictions = await model.classify(video);
-        const topClass = predictions[0].className.toLowerCase();
-        const prob = predictions[0].probability;
-
-        if (damagedChk.checked) {
-          triggerSnap(aszRules.li_beschaedigt);
-          return;
+      async function initCamera() {
+        log("Fordere Kamera an...");
+        setProgress(20);
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } }
+          });
+          video.srcObject = stream;
+          await new Promise((res) => video.onloadedmetadata = res);
+          await video.play();
+          log("Kamera OK.");
+          setProgress(50);
+          return true;
+        } catch (err) {
+          log("ERR: Kamera-Sperre!", true);
+          return false;
         }
-
-        const isBackground = backgroundTerms.some(bg => topClass.includes(bg)) && prob > 0.6;
-        
-        if (isBackground) {
-          alert("Das sieht nach einem Hintergrund aus. Bitte halte ein Gerät oder eine Batterie in den Fokus.");
-          return;
-        }
-
-        let rule = aszRules.geraete;
-        if (topClass.includes('car battery') || topClass.includes('accumulator')) {
-          rule = aszRules.starter;
-        } else if (topClass.includes('power bank') || topClass.includes('laptop') || topClass.includes('cellular')) {
-          rule = aszRules.li_unbeschaedigt;
-        }
-        
-        triggerSnap(rule);
-      } catch (e) {
-        console.error("Manual Scan Error:", e);
       }
-    }
 
-    async function autoScanLoop(timestamp) {
-      if (scanState === 'AUTO' && model && video.readyState === 4) {
-        if (timestamp - lastScanTime > 400) {
-          lastScanTime = timestamp;
-          try {
-            const predictions = await model.classify(video);
-            const targetClass = predictions[0].className.toLowerCase();
-            const prob = predictions[0].probability;
+      async function initModel() {
+        log("Lade TF.js Engine...");
+        setProgress(60);
+        try {
+          if (typeof mobilenet === 'undefined') throw new Error("MobileNet CDN blockiert");
+          log("Lade Weights...");
+          setProgress(85);
+          model = await mobilenet.load({ version: 2, alpha: 0.5 });
+          log("KI Modell OK.");
+          setProgress(100);
+          return true;
+        } catch (err) {
+          log(`ERR: ${err.message}`, true);
+          return false;
+        }
+      }
 
-            const isBackground = backgroundTerms.some(bg => targetClass.includes(bg));
-            const matchesObject = objectKeywords.some(kw => targetClass.includes(kw));
+      function triggerSnap(rule) {
+        scanState = 'RESULT';
+        hudOverlay.className = 'scanner-overlay detected';
+        hudTag.innerText = "OBJECT SNAP!";
+        scanLine.style.display = 'none';
 
-            if (damagedChk.checked) {
-              triggerSnap(aszRules.li_beschaedigt);
-            } else if ((matchesObject || prob > 0.4) && !isBackground) {
-              if (targetClass.includes('car battery') || targetClass.includes('accumulator')) {
-                triggerSnap(aszRules.starter);
-              } else if (targetClass.includes('power bank') || targetClass.includes('laptop') || targetClass.includes('cellular')) {
-                triggerSnap(aszRules.li_unbeschaedigt);
+        result.className = `card active ${rule.css}`;
+        artNr.innerText = rule.art;
+        targetTitle.innerText = rule.title;
+        containerSvgSlot.innerHTML = rule.icon;
+        containerDesc.innerText = rule.containerName;
+        targetInfo.innerHTML = rule.info;
+        targetWarn.innerHTML = rule.warn;
+
+        actionBtn.className = "btn-action btn-reset-mode";
+        btnIcon.innerText = "🔄";
+        btnText.innerText = "Neuer Scan";
+        actionBtn.disabled = false;
+      }
+
+      async function executeSingleClassify() {
+        if (!model || video.readyState !== 4) return;
+        try {
+          const predictions = await model.classify(video);
+          const topClass = predictions[0].className.toLowerCase();
+          const prob = predictions[0].probability;
+
+          if (damagedChk.checked) {
+            triggerSnap(aszRules.li_beschaedigt);
+            return;
+          }
+
+          const isBackground = backgroundTerms.some(bg => topClass.includes(bg)) && prob > 0.6;
+          
+          if (isBackground) {
+            alert("Das sieht nach einem Hintergrund aus. Bitte halte ein Gerät oder eine Batterie in den Fokus.");
+            return;
+          }
+
+          let rule = aszRules.geraete;
+          if (topClass.includes('car battery') || topClass.includes('accumulator')) {
+            rule = aszRules.starter;
+          } else if (topClass.includes('power bank') || topClass.includes('laptop') || topClass.includes('cellular')) {
+            rule = aszRules.li_unbeschaedigt;
+          }
+          
+          triggerSnap(rule);
+        } catch (e) {
+          console.error("Manual Scan Error:", e);
+        }
+      }
+
+      async function autoScanLoop(timestamp) {
+        if (scanState === 'AUTO' && model && video.readyState === 4) {
+          if (timestamp - lastScanTime > 400) {
+            lastScanTime = timestamp;
+            try {
+              const predictions = await model.classify(video);
+              const targetClass = predictions[0].className.toLowerCase();
+              const prob = predictions[0].probability;
+
+              const isBackground = backgroundTerms.some(bg => targetClass.includes(bg));
+              const matchesObject = objectKeywords.some(kw => targetClass.includes(kw));
+
+              if (damagedChk.checked) {
+                triggerSnap(aszRules.li_beschaedigt);
+              } else if ((matchesObject || prob > 0.4) && !isBackground) {
+                if (targetClass.includes('car battery') || targetClass.includes('accumulator')) {
+                  triggerSnap(aszRules.starter);
+                } else if (targetClass.includes('power bank') || targetClass.includes('laptop') || targetClass.includes('cellular')) {
+                  triggerSnap(aszRules.li_unbeschaedigt);
+                } else {
+                  triggerSnap(aszRules.geraete);
+                }
               } else {
-                triggerSnap(aszRules.geraete);
+                hudTag.innerText = `SCANNING... (${Math.round(prob * 100)}%)`;
               }
-            } else {
-              hudTag.innerText = `SCANNING... (${Math.round(prob * 100)}%)`;
+            } catch (e) {
+              console.warn("Scan-Loop Skip:", e);
             }
-          } catch (e) {
-            console.warn("Scan-Loop Skip:", e);
           }
         }
-      }
-      requestAnimationFrame(autoScanLoop);
-    }
-
-    function setAutoScanMode() {
-      scanState = 'AUTO';
-      result.className = "card";
-      damagedChk.checked = false;
-      hudOverlay.className = 'scanner-overlay';
-      hudTag.innerText = "AUTO SCANNING...";
-      scanLine.style.display = 'block';
-
-      actionBtn.className = "btn-action btn-auto-mode";
-      btnIcon.innerText = "📡";
-      btnText.innerText = "Auto-Scan (Aktiv)";
-    }
-
-    function setManualScanMode() {
-      scanState = 'MANUAL';
-      hudOverlay.className = 'scanner-overlay manual';
-      hudTag.innerText = "MANUAL MODE";
-      scanLine.style.display = 'block';
-
-      actionBtn.className = "btn-action btn-manual-mode";
-      btnIcon.innerText = "📷";
-      btnText.innerText = "Manuell Scannen";
-    }
-
-    actionBtn.addEventListener('click', async () => {
-      if (scanState === 'AUTO') {
-        setManualScanMode();
-      } else if (scanState === 'MANUAL') {
-        await executeSingleClassify();
-      } else if (scanState === 'RESULT') {
-        setAutoScanMode();
-      }
-    });
-
-    async function main() {
-      if (!(await initCamera()) || !(await initModel())) {
-        statusText.innerText = "ERR";
-        progressFill.style.background = "#ff4444";
-        if (spinner) spinner.style.display = "none";
-        return;
-      }
-
-      statusText.innerText = "OK";
-      setTimeout(() => {
-        loading.style.display = 'none';
-        actionBtn.disabled = false;
         requestAnimationFrame(autoScanLoop);
-      }, 300);
-    }
+      }
 
-    main();
+      function setAutoScanMode() {
+        scanState = 'AUTO';
+        result.className = "card";
+        damagedChk.checked = false;
+        hudOverlay.className = 'scanner-overlay';
+        hudTag.innerText = "AUTO SCANNING...";
+        scanLine.style.display = 'block';
+
+        actionBtn.className = "btn-action btn-auto-mode";
+        btnIcon.innerText = "📡";
+        btnText.innerText = "Auto-Scan (Aktiv)";
+      }
+
+      function setManualScanMode() {
+        scanState = 'MANUAL';
+        hudOverlay.className = 'scanner-overlay manual';
+        hudTag.innerText = "MANUAL MODE";
+        scanLine.style.display = 'block';
+
+        actionBtn.className = "btn-action btn-manual-mode";
+        btnIcon.innerText = "📷";
+        btnText.innerText = "Manuell Scannen";
+      }
+
+      actionBtn.addEventListener('click', async () => {
+        if (scanState === 'AUTO') {
+          setManualScanMode();
+        } else if (scanState === 'MANUAL') {
+          await executeSingleClassify();
+        } else if (scanState === 'RESULT') {
+          setAutoScanMode();
+        }
+      });
+
+      async function main() {
+        if (!(await initCamera()) || !(await initModel())) {
+          statusText.innerText = "ERR";
+          progressFill.style.background = "#ff4444";
+          if (spinner) spinner.style.display = "none";
+          return;
+        }
+
+        statusText.innerText = "OK";
+        setTimeout(() => {
+          loading.style.display = 'none';
+          actionBtn.disabled = false;
+          requestAnimationFrame(autoScanLoop);
+        }, 300);
+      }
+
+      main();
+    }
   </script>
 </body>
 </html>
