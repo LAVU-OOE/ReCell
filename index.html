@@ -184,7 +184,7 @@
     <h1>Re:Charge</h1>
   </header>
 
-  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.8</div>
+  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.9</div>
 
   <p class="sub">Vorsortierung nach O.Ö. LAVU Richtlinien</p>
 
@@ -247,13 +247,13 @@
   <details class="dev-panel">
     <summary>🛠️ Dev Tools (Cache / Service Worker)</summary>
     <div class="dev-btns">
-      <button class="dev-btn dev-btn-danger" onclick="purgeCacheAndSW()">🗑️ SW & Cache leeren</button>
+      <button class="dev-dev-btn dev-btn-danger" onclick="purgeCacheAndSW()">🗑️ SW & Cache leeren</button>
       <button class="dev-btn" onclick="forceReload()">🔄 Hard Reload</button>
     </div>
   </details>
 
   <script>
-    const APP_VERSION = "v1.0.8-dev";
+    const APP_VERSION = "v1.0.9-dev";
     document.getElementById('dev-version-banner').innerText = `DEV VERSION: ${APP_VERSION}`;
 
     const logContainer = document.getElementById('log-container');
@@ -338,9 +338,9 @@
     let scanState = 'AUTO';
     let lastScanTime = 0;
 
-    // Erhöhte Erkennungs-Keywords für Akkus & Elektronik
-    const batteryKeywords = ['battery', 'accumulator', 'power bank', 'cellular phone', 'laptop', 'ipod', 'charger', 'pack'];
-    const backgroundTerms = ['tile', 'floor', 'wall', 'wood', 'table', 'carpet', 'pattern', 'pavement', 'concrete', 'cloth', 'paper'];
+    // Erweitertes Keyword-Set für MobileNet (da Batterien oft als kleine Objekte, Fernbedienungen, Elektronik o.ä. klassifiziert werden)
+    const objectKeywords = ['battery', 'accumulator', 'power bank', 'cellular', 'phone', 'laptop', 'ipod', 'charger', 'pack', 'remote', 'mouse', 'calculator', 'disk', 'card', 'box', 'packet', 'electronics'];
+    const backgroundTerms = ['tile', 'floor', 'wall', 'wood', 'table', 'carpet', 'pattern', 'pavement', 'concrete', 'cloth', 'paper', 'ceiling', 'sky'];
 
     async function initCamera() {
       log("Fordere Kamera an...");
@@ -405,24 +405,24 @@
         const topClass = predictions[0].className.toLowerCase();
         const prob = predictions[0].probability;
 
-        // Bounding Check: Ignoriere reine Hintergründe
-        const isBackground = backgroundTerms.some(bg => topClass.includes(bg)) && prob > 0.4;
-        const matchesBattery = batteryKeywords.some(kw => topClass.includes(kw));
-
         if (damagedChk.checked) {
           triggerSnap(aszRules.li_beschaedigt);
           return;
         }
 
-        if (isBackground || (!matchesBattery && prob < 0.25)) {
-          alert("Kein Akku / Gerät erkannt! Bitte halte die Batterie deutlicher in das Kamerafeld.");
+        // Wenn manuell fotografiert wird, sind wir kulanter: 
+        // Falls kein reiner Hintergrund, wird es primär als Standard-Gerätebatterie oder anhand des Namens klassifiziert.
+        const isBackground = backgroundTerms.some(bg => topClass.includes(bg)) && prob > 0.6;
+        
+        if (isBackground) {
+          alert("Das sieht nach einem Hintergrund aus. Bitte halte ein Gerät oder eine Batterie in den Fokus.");
           return;
         }
 
         let rule = aszRules.geraete;
         if (topClass.includes('car battery') || topClass.includes('accumulator')) {
           rule = aszRules.starter;
-        } else if (topClass.includes('power bank') || topClass.includes('laptop') || topClass.includes('cellular phone')) {
+        } else if (topClass.includes('power bank') || topClass.includes('laptop') || topClass.includes('cellular')) {
           rule = aszRules.li_unbeschaedigt;
         }
         
@@ -442,20 +442,21 @@
             const prob = predictions[0].probability;
 
             const isBackground = backgroundTerms.some(bg => targetClass.includes(bg));
-            const matchesBattery = batteryKeywords.some(kw => targetClass.includes(kw));
+            const matchesObject = objectKeywords.some(kw => targetClass.includes(kw));
 
             if (damagedChk.checked) {
               triggerSnap(aszRules.li_beschaedigt);
-            } else if (matchesBattery && prob > 0.35 && !isBackground) {
+            } else if ((matchesObject || prob > 0.4) && !isBackground) {
+              // Im Auto-Modus rasten wir ein, wenn ein Objekt erkannt wird oder die Wahrscheinlichkeit stabil ist
               if (targetClass.includes('car battery') || targetClass.includes('accumulator')) {
                 triggerSnap(aszRules.starter);
-              } else if (targetClass.includes('power bank') || targetClass.includes('laptop') || targetClass.includes('cellular phone')) {
+              } else if (targetClass.includes('power bank') || targetClass.includes('laptop') || targetClass.includes('cellular')) {
                 triggerSnap(aszRules.li_unbeschaedigt);
               } else {
                 triggerSnap(aszRules.geraete);
               }
             } else {
-              hudTag.innerText = matchesBattery ? `BATTERY DETECTED (${Math.round(prob * 100)}%)` : `SEARCHING... (${Math.round(prob * 100)}%)`;
+              hudTag.innerText = `SCANNING... (${Math.round(prob * 100}%)`;
             }
           } catch (e) {
             console.warn("Scan-Loop Skip:", e);
