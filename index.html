@@ -141,7 +141,6 @@
     .options-box { width: 100%; max-width: 440px; margin-top: 12px; background: #1e1e1e; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
     .options-box label { font-size: 0.85rem; color: #ff9800; font-weight: bold; cursor: pointer; }
 
-    /* DYNAMISCHE BUTTON-STYLES */
     .btn-action { width: 100%; max-width: 440px; margin-top: 12px; padding: 14px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
     .btn-auto-mode { background: #223311; color: #8bc34a; border: 1px solid #8bc34a; }
     .btn-manual-mode { background: #8bc34a; color: #000; }
@@ -185,14 +184,13 @@
     <h1>Re:Charge</h1>
   </header>
 
-  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.7</div>
+  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.8</div>
 
   <p class="sub">Vorsortierung nach O.Ö. LAVU Richtlinien</p>
 
   <div class="cam-box">
     <video id="webcam" autoplay playsinline muted></video>
     
-    <!-- VISUELLES HUD -->
     <div class="scanner-overlay" id="hud-overlay">
       <div class="scan-line" id="scan-line"></div>
       <div class="scan-reticle"></div>
@@ -255,7 +253,7 @@
   </details>
 
   <script>
-    const APP_VERSION = "v1.0.7-dev";
+    const APP_VERSION = "v1.0.8-dev";
     document.getElementById('dev-version-banner').innerText = `DEV VERSION: ${APP_VERSION}`;
 
     const logContainer = document.getElementById('log-container');
@@ -298,7 +296,6 @@
 
     function forceReload() { window.location.reload(true); }
 
-    // Favicon & SW Setup
     const svgElement = document.getElementById('app-icon-svg');
     const svgString = new XMLSerializer().serializeToString(svgElement);
     const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
@@ -338,8 +335,12 @@
     const targetWarn = document.getElementById('target-warn');
 
     let model = null;
-    let scanState = 'AUTO'; // Moegliche Werte: 'AUTO', 'MANUAL', 'RESULT'
+    let scanState = 'AUTO';
     let lastScanTime = 0;
+
+    // Erhöhte Erkennungs-Keywords für Akkus & Elektronik
+    const batteryKeywords = ['battery', 'accumulator', 'power bank', 'cellular phone', 'laptop', 'ipod', 'charger', 'pack'];
+    const backgroundTerms = ['tile', 'floor', 'wall', 'wood', 'table', 'carpet', 'pattern', 'pavement', 'concrete', 'cloth', 'paper'];
 
     async function initCamera() {
       log("Fordere Kamera an...");
@@ -402,11 +403,24 @@
       try {
         const predictions = await model.classify(video);
         const topClass = predictions[0].className.toLowerCase();
-        
-        let rule = aszRules.geraete;
+        const prob = predictions[0].probability;
+
+        // Bounding Check: Ignoriere reine Hintergründe
+        const isBackground = backgroundTerms.some(bg => topClass.includes(bg)) && prob > 0.4;
+        const matchesBattery = batteryKeywords.some(kw => topClass.includes(kw));
+
         if (damagedChk.checked) {
-          rule = aszRules.li_beschaedigt;
-        } else if (topClass.includes('car battery') || topClass.includes('accumulator')) {
+          triggerSnap(aszRules.li_beschaedigt);
+          return;
+        }
+
+        if (isBackground || (!matchesBattery && prob < 0.25)) {
+          alert("Kein Akku / Gerät erkannt! Bitte halte die Batterie deutlicher in das Kamerafeld.");
+          return;
+        }
+
+        let rule = aszRules.geraete;
+        if (topClass.includes('car battery') || topClass.includes('accumulator')) {
           rule = aszRules.starter;
         } else if (topClass.includes('power bank') || topClass.includes('laptop') || topClass.includes('cellular phone')) {
           rule = aszRules.li_unbeschaedigt;
@@ -427,14 +441,12 @@
             const targetClass = predictions[0].className.toLowerCase();
             const prob = predictions[0].probability;
 
-            hudTag.innerText = `AUTO SCANNING... (${Math.round(prob * 100)}%)`;
-
-            const batteryKeywords = ['battery', 'accumulator', 'power bank', 'cellular phone', 'laptop', 'ipod'];
+            const isBackground = backgroundTerms.some(bg => targetClass.includes(bg));
             const matchesBattery = batteryKeywords.some(kw => targetClass.includes(kw));
 
             if (damagedChk.checked) {
               triggerSnap(aszRules.li_beschaedigt);
-            } else if (matchesBattery && prob > 0.45) {
+            } else if (matchesBattery && prob > 0.35 && !isBackground) {
               if (targetClass.includes('car battery') || targetClass.includes('accumulator')) {
                 triggerSnap(aszRules.starter);
               } else if (targetClass.includes('power bank') || targetClass.includes('laptop') || targetClass.includes('cellular phone')) {
@@ -442,6 +454,8 @@
               } else {
                 triggerSnap(aszRules.geraete);
               }
+            } else {
+              hudTag.innerText = matchesBattery ? `BATTERY DETECTED (${Math.round(prob * 100)}%)` : `SEARCHING... (${Math.round(prob * 100)}%)`;
             }
           } catch (e) {
             console.warn("Scan-Loop Skip:", e);
@@ -477,13 +491,10 @@
 
     actionBtn.addEventListener('click', async () => {
       if (scanState === 'AUTO') {
-        // Switch to Manual Mode
         setManualScanMode();
       } else if (scanState === 'MANUAL') {
-        // Perform Manual Scan immediately
         await executeSingleClassify();
       } else if (scanState === 'RESULT') {
-        // Reset and trigger Auto-Scan mode again
         setAutoScanMode();
       }
     });
