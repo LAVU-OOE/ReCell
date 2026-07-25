@@ -520,3 +520,521 @@
   </script>
 </body>
 </html>
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Re:Charge — ASZ Batterie-Sortierer</title>
+  
+  <meta name="theme-color" content="#8bc34a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" id="favicon" type="image/svg+xml" href="">
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: #121212; color: #fff; display: flex; flex-direction: column; align-items: center; padding: 15px; min-height: 100vh; }
+    
+    header { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    header svg { width: 32px; height: 32px; }
+    h1 { color: #8bc34a; font-size: 1.3rem; }
+    
+    .dev-version-badge {
+      background: #ff4444;
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 5px rgba(255,68,68,0.3);
+    }
+
+    p.sub { font-size: 0.8rem; color: #aaa; margin-bottom: 12px; text-align: center; }
+    
+    .cam-box { position: relative; width: 100%; max-width: 440px; aspect-ratio: 4/3; background: #000; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+    video { width: 100%; height: 100%; object-fit: cover; }
+    
+    /* VISUAL SCANNER HUD OVERLAY */
+    .scanner-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 16px;
+      border: 2px solid rgba(139, 195, 74, 0.3);
+      border-radius: 12px;
+      transition: all 0.2s ease;
+    }
+
+    .scanner-overlay.manual {
+      border-color: rgba(255, 152, 0, 0.4);
+    }
+
+    .scanner-overlay.detected {
+      border-color: #00ff66;
+      box-shadow: inset 0 0 25px rgba(0, 255, 102, 0.4);
+    }
+
+    .scan-reticle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 140px;
+      height: 140px;
+      border: 1px dashed rgba(255, 255, 255, 0.4);
+      border-radius: 12px;
+    }
+
+    .scan-reticle::before, .scan-reticle::after {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-color: #8bc34a;
+      border-style: solid;
+    }
+    .scan-reticle::before { top: -2px; left: -2px; border-width: 3px 0 0 3px; }
+    .scan-reticle::after { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; }
+
+    .scan-line {
+      position: absolute;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #8bc34a, transparent);
+      box-shadow: 0 0 8px #8bc34a;
+      top: 0;
+      animation: scanAnim 2s infinite linear;
+    }
+
+    @keyframes scanAnim {
+      0% { top: 5%; opacity: 0.2; }
+      50% { opacity: 1; }
+      100% { top: 95%; opacity: 0.2; }
+    }
+
+    .scanner-status-tag {
+      align-self: flex-start;
+      background: rgba(0, 0, 0, 0.65);
+      color: #8bc34a;
+      font-family: monospace;
+      font-size: 0.65rem;
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid rgba(139, 195, 74, 0.4);
+      backdrop-filter: blur(4px);
+    }
+
+    #loading { 
+      position: absolute; 
+      inset: 0; 
+      background: rgba(8, 12, 8, 0.94); 
+      display: flex; 
+      flex-direction: column; 
+      justify-content: space-between; 
+      padding: 12px 14px; 
+      font-family: monospace; 
+      color: #00ff66; 
+      z-index: 10;
+      border: 1px solid rgba(0, 255, 102, 0.3);
+    }
+    
+    .loader-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed rgba(0, 255, 102, 0.4); padding-bottom: 6px; font-size: 0.7rem; font-weight: bold; }
+    .loader-status { display: flex; align-items: center; gap: 6px; }
+    .loader-spinner { width: 10px; height: 10px; border: 2px solid #00ff66; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loader-logs { font-size: 0.62rem; line-height: 1.4; color: #00cc55; display: flex; flex-direction: column; justify-content: flex-end; height: 110px; overflow: hidden; }
+    .loader-logs div::before { content: "> "; color: #8bc34a; }
+    .loader-footer { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+    .loader-progress-bar { flex: 1; height: 5px; background: #112211; border-radius: 3px; overflow: hidden; border: 1px solid #004411; }
+    .loader-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #4caf50, #00ff66); transition: width 0.15s ease-out; }
+    .loader-pct { font-size: 0.65rem; font-weight: bold; width: 32px; text-align: right; }
+
+    .options-box { width: 100%; max-width: 440px; margin-top: 12px; background: #1e1e1e; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
+    .options-box label { font-size: 0.85rem; color: #ff9800; font-weight: bold; cursor: pointer; }
+
+    .btn-action { width: 100%; max-width: 440px; margin-top: 12px; padding: 14px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn-auto-mode { background: #223311; color: #8bc34a; border: 1px solid #8bc34a; }
+    .btn-manual-mode { background: #8bc34a; color: #000; }
+    .btn-reset-mode { background: #2196f3; color: #fff; }
+    .btn-action:disabled { background: #222; color: #555; border-color: #333; cursor: not-allowed; }
+
+    .card { width: 100%; max-width: 440px; margin-top: 14px; padding: 16px; border-radius: 12px; background: #1e1e1e; border: 2px solid #444; display: none; }
+    .card.active { display: block; }
+    .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+    .art-nr { font-size: 0.75rem; font-weight: bold; padding: 4px 8px; border-radius: 4px; background: rgba(255,255,255,0.15); }
+    
+    .container-visual { width: 100%; background: #121212; border-radius: 8px; padding: 12px; display: flex; align-items: center; gap: 15px; margin: 10px 0; border: 1px dashed #444; }
+    .container-visual svg { width: 64px; height: 64px; flex-shrink: 0; }
+    .container-text { font-size: 0.9rem; font-weight: bold; }
+
+    .title { font-size: 1.2rem; font-weight: bold; margin-bottom: 4px; }
+    .info { font-size: 0.85rem; line-height: 1.4; color: #ddd; margin-top: 6px; }
+    .warn { font-size: 0.8rem; margin-top: 10px; padding: 8px; background: rgba(255,0,0,0.15); border-radius: 6px; color: #ff8a80; border: 1px solid rgba(255,0,0,0.3); }
+
+    .geraete { border-color: #4caf50; } .geraete .title { color: #81c784; }
+    .li-ok { border-color: #2196f3; } .li-ok .title { color: #64b5f6; }
+    .li-dmg { border-color: #f44336; } .li-dmg .title { color: #e57373; }
+    .starter { border-color: #ff9800; } .starter .title { color: #ffb74d; }
+
+    .dev-panel { width: 100%; max-width: 440px; margin-top: 25px; padding: 10px; background: #221111; border: 1px solid #ff4444; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
+    .dev-panel summary { font-size: 0.8rem; font-weight: bold; color: #ff6666; cursor: pointer; text-align: center; }
+    .dev-btns { display: flex; gap: 8px; margin-top: 8px; }
+    .dev-btn { flex: 1; padding: 8px; font-size: 0.75rem; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; }
+    .dev-btn-danger { background: #881111; border-color: #ff4444; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <svg id="app-icon-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx="22" fill="#1e1e1e"/>
+      <rect x="25" y="30" width="50" height="50" rx="8" fill="none" stroke="#8bc34a" stroke-width="6"/>
+      <rect x="42" y="22" width="16" height="8" rx="2" fill="#8bc34a"/>
+      <path d="M 38 55 L 52 38 L 48 53 L 62 45 L 48 62 L 52 48 Z" fill="#ffc107"/>
+    </svg>
+    <h1>Re:Charge</h1>
+  </header>
+
+  <div id="dev-version-banner" class="dev-version-badge">DEV VERSION: v1.0.10</div>
+
+  <p class="sub">Vorsortierung nach O.Ö. LAVU Richtlinien</p>
+
+  <div class="cam-box">
+    <video id="webcam" autoplay playsinline muted></video>
+    
+    <div class="scanner-overlay" id="hud-overlay">
+      <div class="scan-line" id="scan-line"></div>
+      <div class="scan-reticle"></div>
+      <div class="scanner-status-tag" id="hud-tag">AUTO SCANNING...</div>
+    </div>
+    
+    <div id="loading">
+      <div class="loader-header">
+        <span>SYSTEM INIT</span>
+        <div class="loader-status">
+          <span id="loader-status-text">LOADING</span>
+          <div class="loader-spinner" id="loader-spinner"></div>
+        </div>
+      </div>
+
+      <div class="loader-logs" id="log-container">
+        <div>Booting core engine...</div>
+      </div>
+
+      <div class="loader-footer">
+        <div class="loader-progress-bar">
+          <div class="loader-progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="loader-pct" id="progress-pct">0%</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="options-box" id="options-box">
+    <label for="damaged-chk">⚠️ Batterie beschädigt / aufgebläht?</label>
+    <input type="checkbox" id="damaged-chk" style="width: 20px; height: 20px;">
+  </div>
+
+  <button class="btn-action btn-auto-mode" id="action-btn" disabled>
+    <span id="btn-icon">📡</span>
+    <span id="btn-text">Auto-Scan (Aktiv)</span>
+  </button>
+
+  <div id="result" class="card">
+    <div class="card-header">
+      <div id="target-title" class="title"></div>
+      <span id="art-nr" class="art-nr"></span>
+    </div>
+
+    <div class="container-visual">
+      <div id="container-svg-slot"></div>
+      <div class="container-text" id="container-desc"></div>
+    </div>
+
+    <div id="target-info" class="info"></div>
+    <div id="target-warn" class="warn"></div>
+  </div>
+
+  <details class="dev-panel">
+    <summary>🛠️ Dev Tools (Cache / Service Worker)</summary>
+    <div class="dev-btns">
+      <button class="dev-btn dev-btn-danger" onclick="purgeCacheAndSW()">🗑️ SW & Cache leeren</button>
+      <button class="dev-btn" onclick="forceReload()">🔄 Hard Reload</button>
+    </div>
+  </details>
+
+  <script>
+    const APP_VERSION = "v1.0.10-dev";
+    document.getElementById('dev-version-banner').innerText = `DEV VERSION: ${APP_VERSION}`;
+
+    const logContainer = document.getElementById('log-container');
+    const progressFill = document.getElementById('progress-fill');
+    const progressPct = document.getElementById('progress-pct');
+    const statusText = document.getElementById('loader-status-text');
+    const spinner = document.getElementById('loader-spinner');
+    const hudOverlay = document.getElementById('hud-overlay');
+    const hudTag = document.getElementById('hud-tag');
+    const scanLine = document.getElementById('scan-line');
+
+    function log(text, isError = false) {
+      console.log(`[Re:Charge] ${text}`);
+      const line = document.createElement('div');
+      line.innerText = text;
+      if (isError) line.style.color = '#ff6666';
+      logContainer.appendChild(line);
+      if (logContainer.children.length > 5) {
+        logContainer.removeChild(logContainer.firstChild);
+      }
+    }
+
+    function setProgress(pct) {
+      progressFill.style.width = pct + '%';
+      progressPct.innerText = pct + '%';
+    }
+
+    async function purgeCacheAndSW() {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (let reg of registrations) { await reg.unregister(); }
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        for (let key of keys) { await caches.delete(key); }
+      }
+      alert(`Cache & Worker bereinigt!`);
+      window.location.reload(true);
+    }
+
+    function forceReload() { window.location.reload(true); }
+
+    const svgElement = document.getElementById('app-icon-svg');
+    const svgString = new XMLSerializer().serializeToString(svgElement);
+    const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
+    document.getElementById('favicon').href = URL.createObjectURL(svgBlob);
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(err => console.log('SW:', err));
+    }
+
+    const containerIcons = {
+      box_green: `<svg viewBox="0 0 100 100"><rect x="10" y="35" width="80" height="50" rx="6" fill="#4caf50"/><path d="M 5 30 L 95 30 L 90 20 L 10 20 Z" fill="#388e3c"/><text x="50" y="65" font-size="14" fill="#fff" font-weight="bold" text-anchor="middle">BOX</text></svg>`,
+      box_blue: `<svg viewBox="0 0 100 100"><rect x="10" y="35" width="80" height="50" rx="6" fill="#2196f3"/><path d="M 5 30 L 95 30 L 90 20 L 10 20 Z" fill="#1976d2"/><text x="50" y="65" font-size="14" fill="#fff" font-weight="bold" text-anchor="middle">Li-OK</text></svg>`,
+      box_red: `<svg viewBox="0 0 100 100"><rect x="10" y="35" width="80" height="50" rx="6" fill="#f44336"/><path d="M 5 30 L 95 30 L 90 20 L 10 20 Z" fill="#d32f2f"/><text x="50" y="60" font-size="11" fill="#fff" font-weight="bold" text-anchor="middle">GEFAHR</text></svg>`,
+      tub_yellow: `<svg viewBox="0 0 100 100"><path d="M 10 30 L 90 30 L 80 80 L 20 80 Z" fill="#ff9800"/><rect x="5" y="22" width="90" height="10" rx="3" fill="#f57c00"/><text x="50" y="60" font-size="11" fill="#fff" font-weight="bold" text-anchor="middle">WANNE</text></svg>`
+    };
+
+    const aszRules = {
+      geraete: { title: "Gerätebatterien / Akkus", art: "Art.Nr. 4110 / 4112", css: "geraete", icon: containerIcons.box_green, containerName: "Grüne Sammelbox oder Blaue Li-Box", info: "• Werkzeugakkus (NiCd, NiMH, Li-Ion)<br>• Konsumbatterien & Knopfzellen<br>• Geräteakkus bis 5 kg", warn: "💡 Hinweis: Bitte Kontakte/Pole mit Klebeband abkleben!" },
+      li_unbeschaedigt: { title: "Lithium unbeschädigt", art: "Art.Nr. 4112", css: "li-ok", icon: containerIcons.box_blue, containerName: "Blaue Spezialbox (Lithium < 5 kg)", info: "• Intakte Li-Ion Akkus (E-Bike, Laptops, Werkzeuge)<br>• Ausgebaut aus Geräten", warn: "🔒 Sicherheit: Pole und freistehende Drähte zwingend abkleben!" },
+      li_beschaedigt: { title: "Lithium beschädigt", art: "Art.Nr. 4111", css: "li-dmg", icon: containerIcons.box_red, containerName: "Rote Brandschutzbox / Beutel", info: "• Verformte, aufgeblähte, erhitzte oder beschädigte Akkus<br>• E-Scooter / E-Bike Akkus beschädigt", warn: "🚨 Sicherheit: In Einzel-Kunststoffbeutel einpacken & Pole abkleben!" },
+      starter: { title: "Starterbatterien", art: "Art.Nr. 4100", css: "starter", icon: containerIcons.tub_yellow, containerName: "Säurefeste Kunststoffwanne", info: "• Bleiakkumulatoren mit Säurefüllung<br>• Auto-, Moped-, Traktor- & LKW-Batterien", warn: "⚖️ Sicherheit: Säurefest lagern, + Pole abkleben." }
+    };
+
+    const video = document.getElementById('webcam');
+    const actionBtn = document.getElementById('action-btn');
+    const btnIcon = document.getElementById('btn-icon');
+    const btnText = document.getElementById('btn-text');
+    const loading = document.getElementById('loading');
+    const damagedChk = document.getElementById('damaged-chk');
+    
+    const result = document.getElementById('result');
+    const artNr = document.getElementById('art-nr');
+    const targetTitle = document.getElementById('target-title');
+    const containerSvgSlot = document.getElementById('container-svg-slot');
+    const containerDesc = document.getElementById('container-desc');
+    const targetInfo = document.getElementById('target-info');
+    const targetWarn = document.getElementById('target-warn');
+
+    let model = null;
+    let scanState = 'AUTO';
+    let lastScanTime = 0;
+
+    const objectKeywords = ['battery', 'accumulator', 'power bank', 'cellular', 'phone', 'laptop', 'ipod', 'charger', 'pack', 'remote', 'mouse', 'calculator', 'disk', 'card', 'box', 'packet', 'electronics'];
+    const backgroundTerms = ['tile', 'floor', 'wall', 'wood', 'table', 'carpet', 'pattern', 'pavement', 'concrete', 'cloth', 'paper', 'ceiling', 'sky'];
+
+    async function initCamera() {
+      log("Fordere Kamera an...");
+      setProgress(20);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } }
+        });
+        video.srcObject = stream;
+        await new Promise((res) => video.onloadedmetadata = res);
+        await video.play();
+        log("Kamera OK.");
+        setProgress(50);
+        return true;
+      } catch (err) {
+        log("ERR: Kamera-Sperre!", true);
+        return false;
+      }
+    }
+
+    async function initModel() {
+      log("Lade TF.js Engine...");
+      setProgress(60);
+      try {
+        if (typeof mobilenet === 'undefined') throw new Error("MobileNet CDN blockiert");
+        log("Lade Weights...");
+        setProgress(85);
+        model = await mobilenet.load({ version: 2, alpha: 0.5 });
+        log("KI Modell OK.");
+        setProgress(100);
+        return true;
+      } catch (err) {
+        log(`ERR: ${err.message}`, true);
+        return false;
+      }
+    }
+
+    function triggerSnap(rule) {
+      scanState = 'RESULT';
+      hudOverlay.className = 'scanner-overlay detected';
+      hudTag.innerText = "OBJECT SNAP!";
+      scanLine.style.display = 'none';
+
+      result.className = `card active ${rule.css}`;
+      artNr.innerText = rule.art;
+      targetTitle.innerText = rule.title;
+      containerSvgSlot.innerHTML = rule.icon;
+      containerDesc.innerText = rule.containerName;
+      targetInfo.innerHTML = rule.info;
+      targetWarn.innerHTML = rule.warn;
+
+      actionBtn.className = "btn-action btn-reset-mode";
+      btnIcon.innerText = "🔄";
+      btnText.innerText = "Neuer Scan";
+      actionBtn.disabled = false;
+    }
+
+    async function executeSingleClassify() {
+      if (!model || video.readyState !== 4) return;
+      try {
+        const predictions = await model.classify(video);
+        const topClass = predictions[0].className.toLowerCase();
+        const prob = predictions[0].probability;
+
+        if (damagedChk.checked) {
+          triggerSnap(aszRules.li_beschaedigt);
+          return;
+        }
+
+        const isBackground = backgroundTerms.some(bg => topClass.includes(bg)) && prob > 0.6;
+        
+        if (isBackground) {
+          alert("Das sieht nach einem Hintergrund aus. Bitte halte ein Gerät oder eine Batterie in den Fokus.");
+          return;
+        }
+
+        let rule = aszRules.geraete;
+        if (topClass.includes('car battery') || topClass.includes('accumulator')) {
+          rule = aszRules.starter;
+        } else if (topClass.includes('power bank') || topClass.includes('laptop') || topClass.includes('cellular')) {
+          rule = aszRules.li_unbeschaedigt;
+        }
+        
+        triggerSnap(rule);
+      } catch (e) {
+        console.error("Manual Scan Error:", e);
+      }
+    }
+
+    async function autoScanLoop(timestamp) {
+      if (scanState === 'AUTO' && model && video.readyState === 4) {
+        if (timestamp - lastScanTime > 400) {
+          lastScanTime = timestamp;
+          try {
+            const predictions = await model.classify(video);
+            const targetClass = predictions[0].className.toLowerCase();
+            const prob = predictions[0].probability;
+
+            const isBackground = backgroundTerms.some(bg => targetClass.includes(bg));
+            const matchesObject = objectKeywords.some(kw => targetClass.includes(kw));
+
+            if (damagedChk.checked) {
+              triggerSnap(aszRules.li_beschaedigt);
+            } else if ((matchesObject || prob > 0.4) && !isBackground) {
+              if (targetClass.includes('car battery') || targetClass.includes('accumulator')) {
+                triggerSnap(aszRules.starter);
+              } else if (targetClass.includes('power bank') || targetClass.includes('laptop') || targetClass.includes('cellular')) {
+                triggerSnap(aszRules.li_unbeschaedigt);
+              } else {
+                triggerSnap(aszRules.geraete);
+              }
+            } else {
+              hudTag.innerText = `SCANNING... (${Math.round(prob * 100)}%)`;
+            }
+          } catch (e) {
+            console.warn("Scan-Loop Skip:", e);
+          }
+        }
+      }
+      requestAnimationFrame(autoScanLoop);
+    }
+
+    function setAutoScanMode() {
+      scanState = 'AUTO';
+      result.className = "card";
+      damagedChk.checked = false;
+      hudOverlay.className = 'scanner-overlay';
+      hudTag.innerText = "AUTO SCANNING...";
+      scanLine.style.display = 'block';
+
+      actionBtn.className = "btn-action btn-auto-mode";
+      btnIcon.innerText = "📡";
+      btnText.innerText = "Auto-Scan (Aktiv)";
+    }
+
+    function setManualScanMode() {
+      scanState = 'MANUAL';
+      hudOverlay.className = 'scanner-overlay manual';
+      hudTag.innerText = "MANUAL MODE";
+      scanLine.style.display = 'block';
+
+      actionBtn.className = "btn-action btn-manual-mode";
+      btnIcon.innerText = "📷";
+      btnText.innerText = "Manuell Scannen";
+    }
+
+    actionBtn.addEventListener('click', async () => {
+      if (scanState === 'AUTO') {
+        setManualScanMode();
+      } else if (scanState === 'MANUAL') {
+        await executeSingleClassify();
+      } else if (scanState === 'RESULT') {
+        setAutoScanMode();
+      }
+    });
+
+    async function main() {
+      if (!(await initCamera()) || !(await initModel())) {
+        statusText.innerText = "ERR";
+        progressFill.style.background = "#ff4444";
+        if (spinner) spinner.style.display = "none";
+        return;
+      }
+
+      statusText.innerText = "OK";
+      setTimeout(() => {
+        loading.style.display = 'none';
+        actionBtn.disabled = false;
+        requestAnimationFrame(autoScanLoop);
+      }, 300);
+    }
+
+    main();
+  </script>
+</body>
+</html>
